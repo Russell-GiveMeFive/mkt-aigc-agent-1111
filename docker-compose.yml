@@ -1,0 +1,12 @@
+services:
+  jd-aigc-agent:
+    build: .
+    container_name: jd-aigc-agent
+    ports:
+      - "8788:8788"
+    environment:
+      # 也可启动后在 GUI「设置」页填写
+      - MINIMAX_API_KEY=${MINIMAX_API_KEY:-}
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped

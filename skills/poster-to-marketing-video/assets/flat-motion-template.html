@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Poster Motion</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #000; }
+  body { display: grid; place-items: center; }
+  #poster-stage { position: relative; width: var(--w); height: var(--h); overflow: hidden; isolation: isolate; background: #000; }
+  .full { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: fill; transform-origin: 50% 50%; }
+  #base { z-index: 1; transform: none; }
+  .light { position: absolute; inset: -18%; pointer-events: none; z-index: 8; will-change: transform, opacity; }
+  #light-a { background: radial-gradient(ellipse at 32% 38%, rgba(255,255,255,.24) 0%, rgba(255,255,255,.08) 22%, rgba(255,255,255,0) 58%); mix-blend-mode: screen; }
+  #light-b { background: linear-gradient(116deg, rgba(255,255,255,0) 20%, rgba(255,255,255,.10) 45%, rgba(255,255,255,0) 72%); mix-blend-mode: soft-light; }
+  .region { position: absolute; z-index: 3; pointer-events: none; overflow: hidden; -webkit-mask-image: radial-gradient(ellipse at center, #000 64%, transparent 100%); mask-image: radial-gradient(ellipse at center, #000 64%, transparent 100%); }
+  .region img { position: absolute; object-fit: fill; max-width: none; will-change: transform, filter; }
+  #title-region { z-index: 4; }
+  #product-region { z-index: 5; }
+  .smoke-region { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 6; pointer-events: none; overflow: visible; mix-blend-mode: screen; }
+  .smoke-region img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: fill; will-change: transform, filter, opacity; }
+</style>
+</head>
+<body>
+<main id="poster-stage" aria-label="animated marketing poster">
+  <svg width="0" height="0" aria-hidden="true">
+    <defs>
+      <filter id="smoke-flow-filter" x="-15%" y="-15%" width="130%" height="130%" color-interpolation-filters="sRGB">
+        <feTurbulence id="smoke-turbulence" type="fractalNoise" baseFrequency="0.006 0.014" numOctaves="2" seed="11" result="noise"></feTurbulence>
+        <feOffset id="smoke-noise-offset" in="noise" dx="0" dy="0" result="moving-noise"></feOffset>
+        <feDisplacementMap id="smoke-displace" in="SourceGraphic" in2="moving-noise" scale="5" xChannelSelector="R" yChannelSelector="G"></feDisplacementMap>
+      </filter>
+    </defs>
+  </svg>
+  <img id="base" class="full" alt="" decoding="sync">
+  <div id="light-a" class="light"></div>
+  <div id="light-b" class="light"></div>
+  <div id="title-region" class="region"><img id="title-copy" alt=""></div>
+  <div id="product-region" class="region"><img id="product-copy" alt=""></div>
+  <div id="smoke-layers"></div>
+</main>
+<script>
+const CONFIG = __CONFIG_JSON__;
+window.POSTER_MOTION_CONFIG = CONFIG;
+const $ = (id) => document.getElementById(id);
+document.documentElement.style.setProperty('--w', `${CONFIG.width}px`);
+document.documentElement.style.setProperty('--h', `${CONFIG.height}px`);
+$('base').src = CONFIG.posterUri;
+$('title-copy').src = CONFIG.posterUri;
+$('product-copy').src = CONFIG.hasProductLayer ? CONFIG.productUri : CONFIG.posterUri;
+
+function placeRegion(region, image, box) {
+  const [x, y, w, h] = box;
+  region.style.left = `${x * CONFIG.width}px`;
+  region.style.top = `${y * CONFIG.height}px`;
+  region.style.width = `${w * CONFIG.width}px`;
+  region.style.height = `${h * CONFIG.height}px`;
+  image.style.left = `${-x * CONFIG.width}px`;
+  image.style.top = `${-y * CONFIG.height}px`;
+  image.style.width = `${CONFIG.width}px`;
+  image.style.height = `${CONFIG.height}px`;
+}
+function placeRegisteredLayer(region, image) {
+  region.style.inset = '0';
+  region.style.width = `${CONFIG.width}px`;
+  region.style.height = `${CONFIG.height}px`;
+  region.style.overflow = 'visible';
+  region.style.webkitMaskImage = 'none';
+  region.style.maskImage = 'none';
+  image.style.inset = '0';
+  image.style.width = `${CONFIG.width}px`;
+  image.style.height = `${CONFIG.height}px`;
+}
+placeRegion($('title-region'), $('title-copy'), CONFIG.titleBox);
+if (CONFIG.hasProductLayer) placeRegisteredLayer($('product-region'), $('product-copy'));
+else $('product-region').style.display = 'none';
+const titleCenter = [(CONFIG.titleBox[0] + CONFIG.titleBox[2] / 2) * 100, (CONFIG.titleBox[1] + CONFIG.titleBox[3] / 2) * 100];
+const productCenter = [(CONFIG.productBox[0] + CONFIG.productBox[2] / 2) * 100, (CONFIG.productBox[1] + CONFIG.productBox[3] / 2) * 100];
+$('title-copy').style.transformOrigin = `${titleCenter[0]}% ${titleCenter[1]}%`;
+$('product-copy').style.transformOrigin = `${productCenter[0]}% ${productCenter[1]}%`;
+
+const smokeLayers = (CONFIG.smokeUris || []).map((uri, index) => {
+  const region = document.createElement('div');
+  const image = document.createElement('img');
+  region.className = 'smoke-region';
+  image.alt = '';
+  image.src = uri;
+  region.appendChild(image);
+  $('smoke-layers').appendChild(region);
+  return { region, image, phase: index * 1.37 };
+});
+
+function smooth01(v) { v = Math.max(0, Math.min(1, v)); return v * v * (3 - 2 * v); }
+function seek(ms) {
+  const duration = CONFIG.durationMs;
+  const t = Math.max(0, Math.min(duration, ms)) / duration;
+  const settle = smooth01(Math.min(1, t / 0.18));
+  const hold = 1 - smooth01(Math.max(0, (t - 0.86) / 0.14));
+  const activity = settle * hold;
+  $('base').style.transform = 'none';
+  $('base').style.filter = 'none';
+
+  const lightTravel = -12 + 28 * smooth01(t);
+  $('light-a').style.transform = `translate3d(${lightTravel}%, ${4 * Math.sin(t * Math.PI * 1.4)}%, 0) scale(${1.02 + 0.03 * activity})`;
+  $('light-a').style.opacity = `${0.34 + 0.18 * activity}`;
+  $('light-b').style.transform = `translate3d(${18 - 34 * t}%, 0, 0) rotate(.001deg)`;
+  $('light-b').style.opacity = `${0.18 + 0.14 * Math.sin(Math.PI * t)}`;
+
+  const titleBreath = (0.5 - 0.5 * Math.cos(t * Math.PI * 4.15)) * activity;
+  const titleScale = 1 + 0.018 * titleBreath;
+  const titleY = -CONFIG.height * 0.002 * titleBreath;
+  $('title-copy').style.opacity = '1';
+  $('title-copy').style.transform = `translate3d(0, ${titleY}px, 0) scale(${titleScale})`;
+  $('title-copy').style.filter = `brightness(${1 + 0.025 * titleBreath}) saturate(${1 + 0.02 * titleBreath})`;
+
+  if (CONFIG.hasProductLayer) {
+    const productBreath = (0.5 - 0.5 * Math.cos(t * Math.PI * 3.1 + 0.18)) * activity;
+    const productScale = 1 + 0.018 * productBreath;
+    const productY = -CONFIG.height * 0.0025 * productBreath;
+    $('product-copy').style.opacity = '1';
+    $('product-copy').style.transform = `translate3d(0, ${productY}px, 0) scale(${productScale})`;
+    $('product-copy').style.filter = `brightness(${1 + 0.018 * productBreath}) contrast(${1 + 0.01 * productBreath})`;
+  }
+
+  smokeLayers.forEach(({ region, image, phase }, index) => {
+    const wave = Math.sin(t * Math.PI * 2 + phase) * activity;
+    const rise = (0.5 - 0.5 * Math.cos(t * Math.PI * 1.35 + phase)) * activity;
+    const driftX = (6 + index * 2) * wave;
+    const driftY = -5 * rise;
+    image.style.transform = `translate3d(${driftX}px, ${driftY}px, 0)`;
+    image.style.filter = `url(#smoke-flow-filter) blur(${0.25 + 0.35 * rise}px) brightness(${1.03 + 0.03 * rise})`;
+    region.style.opacity = `${0.10 + 0.07 * activity}`;
+  });
+  $('smoke-noise-offset').setAttribute('dx', `${18 * t}`);
+  $('smoke-noise-offset').setAttribute('dy', `${-12 * t}`);
+  $('smoke-displace').setAttribute('scale', `${4 + 3 * activity}`);
+}
+window.__seek = seek;
+const imagesToLoad = [$('base'), $('title-copy')];
+if (CONFIG.hasProductLayer) imagesToLoad.push($('product-copy'));
+imagesToLoad.push(...smokeLayers.map(layer => layer.image));
+Promise.all(imagesToLoad.map(img => new Promise((resolve, reject) => {
+  if (img.complete && img.naturalWidth) return resolve();
+  img.addEventListener('load', resolve, { once: true });
+  img.addEventListener('error', reject, { once: true });
+}))).then(() => { seek(0); window.__ready = true; });
+</script>
+</body>
+</html>

@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>双11 京东投流素材 AIGC 工厂 · v2 架构</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: radial-gradient(1200px 600px at 70% -10%, #1c1630 0%, #0d0b14 55%) fixed, #0d0b14;
+    color: #cfc9e8;
+    font-family: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    padding: 34px 38px 46px;
+  }
+  .wrap { max-width: 1760px; margin: 0 auto; }
+  h1 { font-size: 24px; color: #ece7ff; letter-spacing: .5px; }
+  h1 .v { color: #a78bfa; }
+  .hsub { color: #8d86ab; font-size: 12.5px; margin: 10px 0 22px; letter-spacing: 1px; }
+  .hsub b { color: #b9b1dd; font-weight: 600; }
+  .band { border: 1px solid rgba(148,130,214,.20); background: rgba(23,20,35,.66); border-radius: 14px; padding: 18px 20px; }
+  .band h2 { font-size: 15.5px; color: #ece7ff; margin-bottom: 4px; }
+  .band h2 .en { color: #7d76a0; font-size: 11px; letter-spacing: 2px; margin-left: 10px; font-weight: 400; }
+  .band h2 .num { color: #a78bfa; margin-right: 6px; }
+  .arrow { text-align: center; color: #8d86ab; font-size: 12px; letter-spacing: 2px; padding: 14px 0; }
+  .arrow::before { content: "▼"; display: block; color: #a78bfa; font-size: 10px; margin-bottom: 6px; }
+  .cols { display: grid; gap: 14px; }
+  .c6 { grid-template-columns: repeat(6, 1fr); }
+  .c3 { grid-template-columns: 1.35fr 1fr 1fr; }
+  .c4 { grid-template-columns: 1fr 1.15fr 1.15fr 1fr; }
+  .cbot { grid-template-columns: 1.05fr 1fr 1fr; gap: 20px; }
+  .tile { border: 1px solid rgba(148,130,214,.22); background: rgba(30,26,46,.55); border-radius: 10px; padding: 13px 15px; }
+  .tile b { display: block; font-size: 13.5px; color: #e6e0ff; margin-bottom: 5px; }
+  .tile p { font-size: 11.5px; color: #9d96bf; line-height: 1.85; }
+  .tile.hl { border-color: #ffd16666; background: rgba(58,49,26,.30); }
+  .tile.hl b { color: #ffd166; }
+  .stage { border: 1px solid rgba(148,130,214,.26); border-radius: 11px; padding: 15px 16px; background: rgba(24,20,38,.6); position: relative; }
+  .stage .lv { display: inline-block; font-family: "SF Mono", Menlo, monospace; font-size: 10.5px; font-weight: 700; color: #0d0b14; background: #a78bfa; border-radius: 5px; padding: 1px 7px; margin-right: 7px; }
+  .stage.l2 .lv { background: #c4b5fd; } .stage.l3 .lv { background: #f9a8d4; } .stage.l4 .lv { background: #6ee7b7; }
+  .stage b.t { font-size: 14px; color: #ece7ff; }
+  .stage p { font-size: 11.8px; color: #a59dc8; line-height: 1.95; margin-top: 9px; }
+  .stage p b { color: #d6cfff; font-weight: 600; }
+  .stage p .y { color: #ffd166; }
+  .stage p .g { color: #6ee7b7; }
+  .stage p .pk { color: #f9a8d4; }
+  .foot-note { font-size: 11.5px; color: #7d76a0; margin-top: 14px; line-height: 1.9; }
+  .foot-note b { color: #b9b1dd; font-weight: 600; }
+  .foot { display: flex; justify-content: space-between; gap: 30px; margin-top: 26px; color: #6d6690; font-size: 11px; letter-spacing: .4px; line-height: 1.9; }
+  .mono { font-family: "SF Mono", Menlo, Consolas, monospace; }
+  .subcard { border: 1px solid rgba(148,130,214,.18); border-radius: 9px; padding: 11px 13px; margin-top: 10px; background: rgba(20,17,31,.6); }
+  .subcard b { display: block; font-size: 12px; color: #d6cfff; margin-bottom: 4px; }
+  .subcard p { font-size: 11px; color: #948db8; line-height: 1.85; }
+  .subcard p .m { font-family: "SF Mono", Menlo, monospace; font-size: 10.5px; color: #c4b5fd; }
+  @media (max-width: 1200px) { .c6, .c4, .cbot { grid-template-columns: 1fr 1fr; } .c3 { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>双11 京东投流素材 AIGC 工厂 · <span class="v">v2 架构</span></h1>
+  <div class="hsub"><b>三层素材模型</b> · <b>四桶存储</b> · <b>pi agent（skill · function calling）</b> · <b>MiniMax M3 / H3</b> · trace 全链分组</div>
+
+  <div class="band">
+    <h2><span class="num">①</span>GUI · Vite + React <span class="en">WEB :8788 · 七页签</span></h2>
+    <div class="cols c6" style="margin-top:12px">
+      <div class="tile"><b>基础素材</b><p>L1 七类分组 · 批量上传 · 删除 · 大图预览</p></div>
+      <div class="tile"><b>商品海报合成</b><p>样式合成 / AI 合成双模式 · pi 调用记录 · 生产管线标记</p></div>
+      <div class="tile"><b>海报合成 - 二次加工</b><p>管线生成（商品/模特均可选）· 直通 · QC 状态 · 文案槽位</p></div>
+      <div class="tile"><b>视频合成</b><p>多选海报批量 → 5s 视频 · ratio/分辨率/时长参数 · H3 任务 taskId</p></div>
+      <div class="tile"><b>运行日志</b><p>全 biz 事件流 · traceId 分组检索</p></div>
+      <div class="tile"><b>设置 / 技能</b><p>MiniMax Key · 四桶逐桶配置 · 测连通 ｜ 技能上传 md · scope · 启停</p></div>
+    </div>
+  </div>
+
+  <div class="arrow">REST（JSON / multipart · jfetch 全局 no-store）</div>
+
+  <div class="band">
+    <h2><span class="num">②</span>API 层 · Express <span class="en mono">:8788</span></h2>
+    <div class="cols c3" style="margin-top:12px">
+      <div class="tile hl"><b>/v2 · 三层模型开放接口</b><p class="mono" style="font-size:10.8px">L1 上传/列表/删除 · L2 compose-bg(+batch)/pipeline · L3 generate(+batch)/direct/jobs/assets · L4 generate/jobs · l4/render 动效渲染 · settings/buckets/test · skills · prompts · GET /v2/files/:bucket/:fileId 桶代理 · /v2/logs</p></div>
+      <div class="tile"><b>/v1 · 兼容接口</b><p>旧单品流水线 + 批量矩阵 + 异步 job/webhook</p></div>
+      <div class="tile"><b>/api · GUI 后端</b><p>settings / stats / styles / copies / 旧素材库</p></div>
+    </div>
+  </div>
+
+  <div class="arrow">接口 → 三层模型引擎</div>
+
+  <div class="band">
+    <h2><span class="num">③</span>三层素材模型 · 生产流水 <span class="en">所有接口均有批量衍生变体</span></h2>
+    <div class="cols c4" style="margin-top:12px">
+      <div class="stage">
+        <span class="lv">L1</span><b class="t">基础素材</b>
+        <p>七类：<b>底版图</b> / 花纹 / <b>艺术字字体样式</b> / <b>商品图</b> / <b>模特图</b>(图·mp4) / 水印 / 标签样式<br>唯一 <span class="y">fileId</span>（前缀=category），落 l1 桶</p>
+      </div>
+      <div class="stage l2">
+        <span class="lv">L2</span><b class="t">商品海报合成</b>
+        <p><b>样式合成</b>：模板直出（默认「完整海报」模板）· parseAdjust 自然语言参数 · <span class="y">秒出</span><br><b>AI 合成</b>：选 L1 素材 + 自然语言 → <span class="y">M3 + load_skill</span> 生成 720×1440 HTML（绝对定位）→ 违规文字清洗 / 底版强制垫底 → 无头 Chrome 截图 → PNG 落 l2 桶<br><b>生产管线标记</b>（批量）决定能否进入 L3</p>
+      </div>
+      <div class="stage l3">
+        <span class="lv">L3</span><b class="t">海报合成 - 二次加工</b>
+        <p>① <b>管线生成</b>：管线背景 + 商品(<span class="g">可选</span>) + 模特(<span class="g">可选</span>) + 文案槽位 → 严格版式合成 → <span class="pk">QC 裁判</span> → 修复 ≤2 轮 → l3 桶<br>② <b>直通</b>：不选商品/模特，L2 背景<span class="y">直接作为最终海报</span>（source=direct）<br>③ 再加工：换商品图重新合成</p>
+      </div>
+      <div class="stage l4">
+        <span class="lv">L4</span><b class="t">视频合成</b>
+        <p>L3 海报 + <b>motion-agent</b>（M3 + load_skill 读 <span class="y">video scope</span> 技能 → 运动提示词）→ H3 5s 竖版（ratio <span class="y">3:4</span> / 分辨率 <span class="y">2K</span> / 时长 4~15s 可调）<br>task 轮询（<span class="g">仅状态变化打日志</span>）→ mp4 落 l4 桶<br>附：flat-safe 动效渲染端点（ffmpeg · 相框锁定规范）</p>
+      </div>
+    </div>
+    <div class="foot-note"><b>引擎链路</b>：copy（文案槽位直传 / M3 生成）→ bg（l2 桶 fileId 直读）→ compose（版式 v2 · 720×1440）→ qc（mock 启发式 / M3 视觉）→ video（mock ffmpeg / H3 v2 + 轮询）· <b>修复环路</b>：缺陷码 → bg / compose / copy 阶段定向重跑 ≤2 轮 · <b>trace 分组</b>：L2 每单入口 newTrace 贯穿（解析→LLM 各轮→渲染→入库）；L4 以任务 id 为 traceId</div>
+  </div>
+
+  <div class="arrow">读写</div>
+
+  <div class="cols cbot">
+    <div class="band">
+      <h2><span class="num">④</span>四桶存储 · storage.js <span class="en">分桶独立配置</span></h2>
+      <div class="cols" style="grid-template-columns:repeat(4,1fr);margin-top:12px">
+        <div class="tile"><b class="mono" style="font-size:12px">l1</b><p>基础素材</p></div>
+        <div class="tile"><b class="mono" style="font-size:12px">l2</b><p>合成背景 (png+html)</p></div>
+        <div class="tile"><b class="mono" style="font-size:12px">l3</b><p>最终海报</p></div>
+        <div class="tile"><b class="mono" style="font-size:12px">l4</b><p>视频 mp4</p></div>
+      </div>
+      <div class="subcard" style="margin-top:12px"><b>local | OSS</b><p>本地磁盘 <span class="m">data/buckets/&lt;bucket&gt;</span> 或 S3 兼容对象存储（endpoint / AK / SK / region / publicBaseUrl 逐桶可配 · 测连通）</p></div>
+      <div class="foot-note"><b>旁路存储</b>：<span class="mono">data/outputs/&lt;taskId&gt;/</span> 任务工作目录 · <span class="mono">data/skills/</span> 技能库（meta.json + *.md）· <span class="mono">data/settings.json</span> 配置 · buckets-meta/ 桶元数据（name/category/pipeline）</div>
+    </div>
+
+    <div class="band">
+      <h2><span class="num">⑤</span>pi 内嵌 Agent <span class="en">skill · function calling · QC 裁判</span></h2>
+      <div class="subcard"><b>QC Judge</b>
+        <p>系统检查清单 + 版式 zones JSON + 海报图 → JSON verdict {pass, score, defects[], repairPlan}；MOCK=本地启发式（分辨率/对比度/商品区 σ/CTA 亮度）</p></div>
+      <div class="subcard"><b>技能机制 · askWithSkills</b>
+        <p><span class="m">skillCatalog(scope)</span> 按 scope（all/html/copy/qc/video）+ enabled 过滤 → 目录非空注册 <span class="m">load_skill</span> 工具（M3 多轮 function calling）· <b>全部停用 → tools=[] 工具完全清除</b> · 停用技能取全文返回「未找到」</p></div>
+      <div class="subcard"><b>PiTracePanel 调用记录</b>
+        <p>按 traceId 分组：adjust-parse / round（🔧FC×N）/ load_skill（skillsLoaded）/ plate-forced / 入库全链 · L2 biz=l2compose · L4 biz=l4video（motion-agent 全程可见）</p></div>
+      <div class="foot-note"><b>调用协议</b>：pi-ai anthropic 协议 → {base}/anthropic/v1/messages；失败自动回退直连 chatVisionText</div>
+    </div>
+
+    <div class="band">
+      <h2><span class="num">⑥</span>外部服务 · MiniMax <span class="en mono">api.minimax.cn</span></h2>
+      <div class="subcard"><b>M3 · Messages API</b>
+        <p><span class="m">POST /anthropic/v1/messages</span><br>system + messages + thinking{adaptive|disabled}<br>文案 JSON / HTML 生成 / QC 视觉 / L4 motion-agent</p></div>
+      <div class="subcard"><b>image-01 / H3 v2</b>
+        <p><span class="m">POST /v1/image_generation</span>（AIGC 背景备用）<br><span class="m">POST /v2/video_generation</span> → task_id（ratio/resolution/duration 透传）<br><span class="m">GET /v2/query/video_generation/{id}</span> → content.url</p></div>
+      <div class="subcard"><b>视频规范 · skill v4</b>
+        <p>poster-to-marketing-video（13.3KB）：背景/相框锁定 · 标题 100~103% 呼吸 · 商品仅透明图层可动 · 烟雾 scale 恒 1.0 · flat-safe / layered 双模式</p></div>
+    </div>
+  </div>
+
+  <div class="foot">
+    <div>MOCK 模式：未配置 Key 全链路本地模拟，协议与 LIVE 一致</div>
+    <div>渲染引擎：playwright-core · channel chrome · deviceScaleFactor 2</div>
+    <div>部署：node:22-slim + ffmpeg + chromium · 数据卷 /app/data</div>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>双11 素材工厂 · v2 架构图</title>
+<style>
+  :root {
+    --bg: #0b0812; --bg2: #120d1e;
+    --panel: rgba(168,151,209,0.07); --panel2: rgba(168,151,209,0.12);
+    --line: rgba(168,151,209,0.28); --line2: rgba(168,151,209,0.45);
+    --ink: #efeaf7; --dim: #a99fc2; --faint: #6f6489;
+    --violet: #7c5cff; --deep: #4130a1; --lav: #d8cde8; --gold: #ffe28a;
+    --ok: #5fd4a0; --warn: #ffb45c;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    font-family: -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    background:
+      radial-gradient(1100px 500px at 80% -10%, rgba(124,92,255,0.18), transparent 60%),
+      radial-gradient(900px 600px at -10% 110%, rgba(65,48,161,0.25), transparent 55%),
+      linear-gradient(180deg, var(--bg2), var(--bg));
+    color: var(--ink); padding: 34px 30px 44px; min-width: 1180px;
+  }
+  .mono { font-family: 'JetBrains Mono', Menlo, monospace; }
+  .head { display: flex; align-items: baseline; gap: 16px; margin-bottom: 6px; }
+  .head h1 { font-size: 24px; letter-spacing: 1px;
+    background: linear-gradient(92deg, #fff 10%, var(--lav) 55%, var(--violet) 105%);
+    -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .head .sub { color: var(--faint); font-size: 12.5px; letter-spacing: 2px; text-transform: uppercase; }
+  .band { border: 1px solid var(--line); border-radius: 16px; background: var(--panel); padding: 14px 16px 16px; }
+  .band > .cap { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
+  .band > .cap b { font-size: 14.5px; }
+  .band > .cap span { color: var(--faint); font-size: 11px; letter-spacing: 1.5px; }
+  .row { display: flex; gap: 12px; }
+  .card {
+    flex: 1; border: 1px solid var(--line); border-radius: 12px; background: var(--panel2);
+    padding: 10px 12px; min-width: 0; overflow: hidden;
+  }
+  .card b { display: block; font-size: 13px; margin-bottom: 3px; }
+  .card .d { color: var(--dim); font-size: 11.5px; line-height: 1.55; }
+  .card .t { color: var(--faint); font-size: 10px; letter-spacing: 1px; }
+  .accent { border-color: rgba(124,92,255,0.55); background: rgba(124,92,255,0.10); }
+  .gold { border-color: rgba(255,226,138,0.45); background: rgba(255,226,138,0.07); }
+  .gold b { color: var(--gold); }
+  .ok2 { border-color: rgba(95,212,160,0.4); }
+  .arrow { text-align: center; color: var(--violet); font-size: 17px; line-height: 1; padding: 7px 0; }
+  .arrow small { color: var(--faint); font-size: 10.5px; letter-spacing: 1px; margin-left: 8px; }
+  .chain { display: flex; align-items: stretch; gap: 0; }
+  .chain .card { border-radius: 0; }
+  .chain .card:first-child { border-radius: 12px 0 0 12px; }
+  .chain .card:last-child { border-radius: 0 12px 12px 0; }
+  .chain .link { display: flex; align-items: center; padding: 0 9px; color: var(--gold); font-size: 15px; background: rgba(255,226,138,0.05); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  .lvl { font-size: 10px; letter-spacing: 1.5px; color: var(--gold); border: 1px solid rgba(255,226,138,0.4); border-radius: 99px; padding: 1px 8px; margin-right: 6px; }
+  .pill { display: inline-block; border: 1px solid var(--line2); border-radius: 99px; padding: 2px 10px; font-size: 11px; color: var(--dim); margin: 2px 3px 0 0; }
+  .endpoints { margin-top: 8px; color: var(--faint); font-size: 10.5px; line-height: 1.8; }
+  .endpoints em { color: var(--dim); font-style: normal; }
+  .foot { margin-top: 14px; color: var(--faint); font-size: 11px; display: flex; gap: 22px; }
+  @media print {
+    body { background: #fff; color: #111; min-width: 0; padding: 10px; }
+    .band, .card { background: #f6f4fb; border-color: #c9c2dd; }
+    .card b, .card .d { color: #222; }
+    .card .d, .card .t, .band .cap span, .foot { color: #666; }
+    .head h1 { color: #3a2a86; -webkit-text-fill-color: initial; }
+    .accent { background: #ece7ff; border-color: #8d7bff; }
+    .gold { background: #fff8e2; border-color: #d8b94a; }
+  }
+</style>
+</head>
+<body>
+
+<div class="head">
+  <h1>双11 京东投流素材 AIGC 工厂 · v2 架构</h1>
+  <span class="sub mono">三层素材模型 · 四桶存储 · pi Agent · MiniMax M3 / H3</span>
+</div>
+
+<!-- ① GUI -->
+<div class="band">
+  <div class="cap"><b>① GUI · Vite + React</b><span>WEB :8788 · 六页签</span></div>
+  <div class="row">
+    <div class="card accent"><b>基础素材</b><div class="d">L1 七类分组 · 批量上传 · 分页查看</div></div>
+    <div class="card accent"><b>平台合成素材</b><div class="d">自然语言合成 · 分类单选 · 管线标记</div></div>
+    <div class="card accent"><b>商家最终海报</b><div class="d">管线生成 · 再加工 · 海报库分页</div></div>
+    <div class="card accent"><b>视频合成</b><div class="d">海报批量 → 5s 视频 · 分页库</div></div>
+    <div class="card"><b>设置</b><div class="d">Key 安全回显 · 四桶配置 · OSS 拉取</div></div>
+    <div class="card"><b>技能</b><div class="d">上传 md → 注入 QC 裁判</div></div>
+  </div>
+</div>
+<div class="arrow">▼<small>REST（JSON / multipart，X-API-Key 可选鉴权 · 列表统一分页 page/pageSize → {items,total,page,pages,hasMore}）</small></div>
+
+<!-- ② API -->
+<div class="band">
+  <div class="cap"><b>② API 层 · Express</b><span class="mono">:8788</span></div>
+  <div class="row">
+    <div class="card gold"><b>/v2 · 三层模型开放接口</b>
+      <div class="d">L1 上传/分页列表/删除 · L2 compose-bg(+batch)/pipeline · L3 generate(+batch)/rework(+batch)/jobs/assets · L4 generate(+batch)/jobs/assets · settings(持久化) · buckets/:test/:sync · skills · <span class="mono">GET /v2/files/:bucket/:fileId</span> 桶代理</div>
+    </div>
+    <div class="card ok2"><b>鉴权与错误</b><div class="d">X-API-Key 逐请求热生效 · async 异常统一转 JSON 500（不挂死连接）</div></div>
+    <div class="card"><b>/v1 · 兼容接口</b><div class="d">旧单品流水线 + 批量矩阵 + 异步 job/webhook</div></div>
+    <div class="card"><b>/api · GUI 后端</b><div class="d">settings / stats / styles / copies / 旧素材库</div></div>
+  </div>
+</div>
+<div class="arrow">▼<small>接口 → 三层模型引擎</small></div>
+
+<!-- ③ 三层流水 -->
+<div class="band">
+  <div class="cap"><b>③ 三层素材模型 · 生产流水</b><span>所有接口均有批量衍生变体</span></div>
+  <div class="chain">
+    <div class="card"><b><span class="lvl">L1</span>基础素材</b>
+      <div class="d">七类：底版图 / 花纹 / 艺术字字体样式 / 商品图 / 模特图(图·mp4) / 水印 / 标签样式<br>唯一 fileId（前缀=category），落 l1 桶</div>
+    </div>
+    <div class="link mono">→</div>
+    <div class="card accent"><b><span class="lvl">L2</span>平台合成素材</b>
+      <div class="d">选 L1 素材 + 自然语言 → <b style="display:inline">M3 生成 720×1440 HTML</b>（绝对定位）→ inlineImages → <b style="display:inline">无头 Chrome 截图</b> → PNG 落 l2 桶（+HTML 存档）<br>生产管线标记（批量）决定能否进入 L3</div>
+    </div>
+    <div class="link mono">→</div>
+    <div class="card accent"><b><span class="lvl">L3</span>商家最终海报</b>
+      <div class="d">① 管线生成：管线背景 + 商品 + 模特 + 文案槽位 → 严格版式合成 → <b style="display:inline">QC 裁判</b> → 修复 ≤2 轮 → l3 桶<br>② 再加工：换商品图重新合成</div>
+    </div>
+    <div class="link mono">→</div>
+    <div class="card gold"><b><span class="lvl">L4</span>视频合成</b>
+      <div class="d">L3 海报 + prompt → H3 5s 竖版<br>I2VA 首帧 / R2VA 参考视频（互斥）<br>task 轮询 → mp4 落 l4 桶</div>
+    </div>
+  </div>
+  <div class="endpoints">
+    引擎链路：<em>copy（文案槽位直传 / M3 生成）→ bg（l2 桶 fileId 直读）→ compose（版式 v2 · 720×1440）→ qc（mock 启发式 / M3 视觉）→ video（mock ffmpeg / H3 v2 + 轮询）</em>
+    · 修复环路：缺陷码 → bg / compose / copy 阶段定向重跑 ≤2 轮
+  </div>
+</div>
+<div class="arrow">▼<small>读写</small></div>
+
+<!-- ④ 存储 + Agent + 外部 -->
+<div class="row" style="align-items: stretch;">
+  <div class="band" style="flex: 1.15;">
+    <div class="cap"><b>④ 素材库 · SQLite + 四桶存储</b><span>索引与对象分离</span></div>
+    <div class="row">
+      <div class="card accent" style="flex: 1.5;"><b>SQLite 素材库<span class="mono" style="font-size:10px"> assets.db</span></b><div class="d">L1~L4 各层素材统一入库 · fileId 主键 + category / pipeline / createdAt · 列表零 OSS 请求 · 旧 buckets-meta JSON 自动迁移 · node:sqlite 内置驱动</div></div>
+      <div class="card ok2" style="flex: 1;"><b>四桶对象存储 · local | OSS</b><div class="d">本地磁盘 data/buckets/&lt;bucket&gt;/ 或 S3 兼容对象存储，逐桶可配（endpoint / AK / SK / region / publicBaseUri）· 测连通</div></div>
+    </div>
+    <div class="row" style="margin-top: 10px;">
+      <div class="card"><b class="mono">l1 · 基础素材</b></div>
+      <div class="card"><b class="mono">l2 · 合成背景 (png+html)</b></div>
+      <div class="card"><b class="mono">l3 · 最终海报</b></div>
+      <div class="card"><b class="mono">l4 · 视频 mp4</b></div>
+    </div>
+    <div class="endpoints">旁路存储：<em>data/outputs/&lt;taskId&gt;/ 任务工作目录 · data/skills/ 技能库 · data/settings.json 配置（保存即持久化，Key 安全回显）</em></div>
+    <div class="endpoints">对账拉取（OSS → 素材库索引）三条路：<em>① 服务启动自动 ② 设置保存后自动 ③ 设置页「⟳ 同步」手动 —— 全量列举一次（翻页取全），索引外对象按前缀推断类别补录，只补录不删除</em></div>
+  </div>
+  <div class="band" style="flex: 1;">
+    <div class="cap"><b>⑤ pi 内嵌 Agent</b><span>QC 裁判</span></div>
+    <div class="card accent">
+      <b>QC Judge</b>
+      <div class="d">系统检查清单 + 版式 zones JSON + 海报图 → JSON verdict {pass, score, defects[], repairPlan}；MOCK=本地启发式（分辨率/对比度/商品区 σ/CTA 亮度）</div>
+      <div class="t" style="margin-top:6px;">技能注入：技能页 md → enabledSkillsText() → system prompt</div>
+    </div>
+    <div class="endpoints">调用协议：<em>pi-ai anthropic 协议 → {base}/anthropic/v1/messages；失败自动回退直连 chatVisionText</em></div>
+  </div>
+  <div class="band" style="flex: 1;">
+    <div class="cap"><b>⑥ 外部服务 · MiniMax</b><span class="mono">api.minimax.cn</span></div>
+    <div class="card gold"><b class="mono">M3 · Messages API</b>
+      <div class="d mono" style="font-size:10.5px;">POST /anthropic/v1/messages<br>system + messages + thinking{adaptive|disabled}<br>文案 JSON / HTML 生成 / QC 视觉</div>
+    </div>
+    <div class="card gold" style="margin-top:10px;"><b class="mono">image-01 / H3 v2</b>
+      <div class="d mono" style="font-size:10.5px;">POST /v1/image_generation（AIGC 背景备用）<br>POST /v2/video_generation → task_id<br>GET /v2/query/video_generation/{id} → content.url</div>
+    </div>
+  </div>
+</div>
+
+<div class="foot mono">
+  <span>MOCK 模式：未配置 Key 全链路本地模拟，协议与 LIVE 一致</span>
+  <span>渲染引擎：playwright-core · channel chrome · deviceScaleFactor 2</span>
+  <span>测试：node --test · 39 用例（MiniMax 协议单测 + v2 全链路集成，DATA_DIR 隔离）</span>
+  <span>部署：node:22-slim + ffmpeg + chromium · 数据卷 /app/data</span>
+</div>
+
+</body>
+</html>

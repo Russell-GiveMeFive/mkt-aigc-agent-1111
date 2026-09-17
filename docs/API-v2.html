@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>素材工厂 v2 · 接口文档</title>
+<style>
+  :root {
+    --ink: #1c1630; --dim: #6b6486; --faint: #9a93b3;
+    --violet: #6a48f0; --deep: #4130a1; --gold: #b8860b;
+    --line: #e3ddf2; --panel: #f7f5fc; --code: #f2eefb;
+    --get: #0e7a4e; --post: #6a48f0; --put: #b0700f; --del: #c93b52;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif; color: var(--ink); font-size: 13px; line-height: 1.65; background: #fff; }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 44px 40px 60px; }
+  h1 { font-size: 25px; letter-spacing: 0.5px; color: var(--deep); }
+  .sub { color: var(--dim); font-size: 12.5px; margin: 6px 0 22px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px 22px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 16px; font-size: 12px; color: var(--dim); margin-bottom: 26px; }
+  .meta b { color: var(--ink); font-weight: 600; }
+  h2 { font-size: 17px; margin: 34px 0 4px; color: var(--deep); border-bottom: 2px solid var(--line); padding-bottom: 6px; }
+  h2 .mono { font-size: 11px; color: var(--faint); font-weight: 400; letter-spacing: 1.5px; margin-left: 8px; }
+  h3 { font-size: 13.5px; margin: 20px 0 6px; }
+  p { margin: 6px 0; color: #3c3560; }
+  .ep { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin: 12px 0; page-break-inside: avoid; }
+  .ep .head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .m { font-family: 'JetBrains Mono', Menlo, monospace; font-size: 10.5px; font-weight: 700; border-radius: 6px; padding: 2px 8px; color: #fff; }
+  .m.GET { background: var(--get); } .m.POST { background: var(--post); } .m.PUT { background: var(--put); } .m.DELETE { background: var(--del); }
+  .path { font-family: 'JetBrains Mono', Menlo, monospace; font-size: 12.5px; font-weight: 600; }
+  .desc { color: var(--dim); font-size: 12px; margin: 5px 0 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; margin: 8px 0 2px; }
+  th { text-align: left; color: var(--faint); font-weight: 500; font-size: 10.5px; letter-spacing: 1px; border-bottom: 1px solid var(--line); padding: 4px 8px; }
+  td { padding: 5px 8px; border-bottom: 1px solid #efecf7; vertical-align: top; }
+  td:first-child { font-family: 'JetBrains Mono', Menlo, monospace; font-size: 11px; white-space: nowrap; }
+  code, pre { font-family: 'JetBrains Mono', Menlo, monospace; }
+  code { background: var(--code); border-radius: 4px; padding: 1px 5px; font-size: 11px; color: var(--deep); }
+  pre { background: var(--code); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font-size: 11px; line-height: 1.6; overflow-x: auto; margin: 8px 0; page-break-inside: avoid; white-space: pre-wrap; word-break: break-word; }
+  .tag { display: inline-block; font-size: 10px; border: 1px solid var(--line); border-radius: 99px; padding: 1px 8px; color: var(--dim); margin-right: 5px; }
+  .toc { columns: 2; column-gap: 30px; font-size: 12.5px; margin: 8px 0 4px; }
+  .toc a { color: var(--deep); text-decoration: none; display: block; padding: 2.5px 0; border-bottom: 1px dotted #e8e4f4; }
+  .note { background: #fff9ec; border: 1px solid #f0dfae; border-radius: 8px; padding: 8px 12px; font-size: 12px; color: #7a5c0e; margin: 10px 0; }
+  .foot { margin-top: 40px; padding-top: 12px; border-top: 1px solid var(--line); color: var(--faint); font-size: 11px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+  @media print {
+    .wrap { padding: 10mm 12mm; max-width: none; }
+    h2 { page-break-after: avoid; }
+    .ep, pre, table { page-break-inside: avoid; }
+    a { color: inherit; }
+  }
+  @page { size: A4; margin: 12mm; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>素材工厂 v2 · 接口文档</h1>
+<div class="sub">双11 京东投流素材 AIGC · 三层素材模型开放接口 · 生成于 2026-03</div>
+
+<div class="meta">
+  <span><b>Base URL</b>　http://&lt;host&gt;:8788</span>
+  <span><b>鉴权</b>　请求头 <code>X-API-Key: &lt;key&gt;</code>（设置页配置后启用；留空不鉴权）</span>
+  <span><b>格式</b>　JSON（上传为 multipart/form-data）</span>
+  <span><b>MOCK</b>　未配置 MiniMax Key 时全链路本地模拟，协议与 LIVE 完全一致</span>
+</div>
+
+<p><b>四桶存储</b>：<code>l1</code> 基础素材 / <code>l2</code> 平台合成素材 / <code>l3</code> 商家最终营销海报 / <code>l4</code> 视频合成。逐桶独立配置 <code>local</code>（本地磁盘）或 <code>oss</code>（S3 兼容对象存储）。所有桶内资源经统一代理访问：</p>
+<pre>GET /v2/files/{bucket}/{fileId}</pre>
+<p><b>fileId 规则</b>：<code>{category前缀}_{时间戳36进制}{6位hex}.{扩展名}</code>（如 <code>plate_mtymcg7xc1ae59.png</code>），即唯一文件标识符，全链路引用。</p>
+
+<div class="note"><b>分页查询</b>：所有列表接口（L1/L2/L3/L4 的 assets 与 jobs）统一支持 <code>?page=1&amp;pageSize=24</code>（pageSize ≤ 200），统一出参 <code>{items, total, page, pages, pageSize, hasMore}</code>。列表读取本地素材库索引（<b>SQLite</b>：data/assets.db，各层素材统一入库，零 OSS 请求）；桶内容通过 <code>POST /v2/buckets/:bucket/sync</code> 对账补录（全量列举一次，OSS 自动循环翻页）。</div>
+
+<h2 id="toc">目录<span class="mono">CONTENTS</span></h2>
+<div class="toc">
+  <a href="#general">通用</a>
+  <a href="#l1">L1 基础素材</a>
+  <a href="#l2">L2 平台合成素材</a>
+  <a href="#l3">L3 商家最终营销海报</a>
+  <a href="#l4">L4 视频合成</a>
+  <a href="#settings">设置（含四桶配置）</a>
+  <a href="#skills">技能（pi Agent）</a>
+  <a href="#minimax">附：底层 MiniMax 调用</a>
+  <a href="#v1">附：v1 兼容接口</a>
+</div>
+
+<h2 id="general">通用</h2>
+<div class="ep">
+  <div class="head"><span class="m GET">GET</span><span class="path">/v2/meta</span></div>
+  <p class="desc">枚举与运行状态。</p>
+<pre>{
+  "buckets": ["l1", "l2", "l3", "l4"],
+  "l1Categories": [
+    { "key": "plate",     "label": "底版图",         "accept": "image/*" },
+    { "key": "pattern",   "label": "花纹",           "accept": "image/*" },
+    { "key": "arttext",   "label": "艺术字字体样式", "accept": "image/*" },
+    { "key": "product",   "label": "商品图",         "accept": "image/*" },
+    { "key": "model",     "label": "模特图",         "accept": "image/*,video/mp4" },
+    { "key": "watermark", "label": "水印",           "accept": "image/*" },
+    { "key": "labelstyle","label": "标签样式",       "accept": "image/*" }
+  ],
+  "renderer": "html-screenshot",
+  "mock": true
+}</pre>
+</div>
+<div class="ep">
+  <div class="head"><span class="m GET">GET</span><span class="path">/v2/files/:bucket/:fileId</span></div>
+  <p class="desc">读取任意桶内资源（图片 / 视频 / HTML 存档），带 1h 缓存头。</p>
+</div>
+
+<h2 id="l1">L1 基础素材</h2>
+<p>用户上传的原始素材，七类 category，fileId 前缀即 category。多文件一次上传即为批量。</p>
+
+<div class="ep">
+  <div class="head"><span class="m POST">POST</span><span class="path">/v2/l1/assets</span><span class="tag">multipart</span></div>
+  <table>
+    <tr><th>字段</th><th>类型</th><th>说明</th></tr>
+    <tr><td>category</td><td>text</td><td>必填：plate / pattern / arttext / product / model / watermark / labelstyle</td></tr>
+    <tr><td>files[]</td><td>file</td><td>一个或多个文件；图片，或 model 类的 mp4 视频</td></tr>
+    <tr><td>names</td><td>text</td><td>可选，JSON 数组，与 files 对应的自定义名称</td></tr>
+  </table>
+<pre>curl -X POST http://localhost:8788/v2/l1/assets \
+  -F category=plate -F files=@底版.png -F files=@底版2.png
+
+# 201
+{ "items": [ { "fileId": "plate_mtymcg7xc1ae59.png",
+    "url": "/v2/files/l1/plate_mtymcg7xc1ae59.png",
+    "category": "plate", "name": "底版", "size": 12345, "createdAt": 1700000000000 } ],
+  "total": 1 }</pre>
+</div>
+<div class="ep">
+  <div class="head"><span class="m GET">GET</span><span class="path">/v2/l1/assets?category=plate</span></div>
+  <p class="desc">列表，可按 category 过滤。</p>
+</div>
+<div class="ep">
+  <div class="head"><span class="m DELETE">DELETE</span><span class="path">/v2/l1/assets/:fileId</span><span class="tag">单个删除</span></div>
+</div>
+<div class="ep">
+  <div class="head"><span class="m POST">POST</span><span class="path">/v2/l1/assets/delete</span><span class="tag">批量删除</span></div>
+<pre>{ "fileIds": ["plate_x.png", "pattern_y.png"] }</pre>
+</div>
+
+<h2 id="l2">L2 平台合成素材</h2>
+<div class="ep">
+  <div class="head"><span class="m POST">POST</span><span class="path">/v2/l2/compose-bg</span><span class="tag">自然语言合成</span></div>
+  <p class="desc">选 L1 基础素材 + 一句自然语言 → <b>LLM 生成 720×1440 HTML（绝对定位精细控制）→ 无头 Chrome 截图</b> → 存入 L2 桶（PNG + HTML 存档）。</p>
+<pre>{
+  "itemIds": ["plate_x.png", "pattern_y.png"],
+  "instruction": "底版铺满整张背景，金色粒子以 25% 透明度平铺，艺术字放上方居中",
+  "name": "红金粒子 v2"
+}
+
+# 201（含生成的 HTML 全文，便于微调后重生成）
+{ "fileId": "l2bg_mtymbsrac9a354.png", "url": "/v2/files/l2/l2bg_mtymbsrac9a354.png",
+  "name": "红金粒子 v2", "htmlFileId": "l2bg_mtymbsrac9a354.html",
+  "source": "minimax-m3+screenshot", "pipeline": false, "html": "&lt;!DOCTYPE html&gt;…" }</pre>
+  <p class="desc">source 组成：{LLM 来源}+{渲染方式} —— minimax-m3 / mock-template + screenshot / fallback（无浏览器时 sharp 渐变兜底）。</p>
+</div>
+<div class="ep">
+  <div class="head"><span class="m POST">POST</span><span class="path">/v2/l2/compose-bg/batch</span><span class="tag">批量衍生</span></div>
+<pre>{ "jobs": [ { "itemIds": ["…"], "instruction": "…" }, { "itemIds": ["…"], "instruction": "…" } ] }</pre>
+</div>
+<div class="ep">
+  <div class="head"><span class="m POST">POST</span><span class="path">/v2/l2/pipeline</span><span class="tag">生产管线标记（批量）</span></div>
+  <p class="desc">被标记的背景才有资格进入 L3 自动生成。</p>
+<pre>{ "fileIds": ["l2bg_x.png"], "enabled": true }</pre>
+</div>
+<div class="ep">
+  <div class="head"><span class="m GET">GET</span><span class="path">/v2/l2/assets?pipeline=1</span></div>
+  <p class="desc">列表；<code>pipeline=1</code> 只看管线内素材。</p>
+</div>
+<div class="ep">
+  <div class="head"><span class="m DELETE">DELETE</span><span class="path">/v2/l2/assets/:fileId</span>　<span class="m POST">POST</span><span class="path">/v2/l2/assets/delete</span></div>
+  <p class="desc">单个 / 批量删除（同 L1 模式）。</p>
+</div>
+
+<h2 id="l3">L3 商家最终营销海报</h2>
+<div class="ep">
+  <div class="head"><span class="m POST">POST</span><span class="path">/v2/l3/generate</span><span class="tag">管线生成 · 异步</span></div>
+  <p class="desc">bgFileId 必须是已加入生产管线的 L2 背景。合成（720×1440 京东版式）→ QC 裁判打分 → 缺陷自动修复（≤ maxRepairRounds 轮）→ 海报落 L3 桶。</p>
+<pre>{
+  "bgFileId": "l2bg_x.png",            // 必填，L2 桶内且已标记生产管线
+  "productFileId": "product_y.png",    // 必填，L1 商品图
+  "modelFileId": "model_z.png",        // 可选，L1 模特图
+  "modelVideoFileId": "model_v.mp4",   // 可选，L1 模特 mp4 → H3 Reference 模式
+  "copySlots": {                       // 文案槽位直传，缺省自动生成
+    "headline": "双11狂欢价\n好物到手",
+    "productName": "限定礼盒", "price": "299", "oldPrice": "599",
+    "cta": "立即抢购", "promo": "前2小时5折"
+  },
+  "generateVideo": false               // 完成后直接送 L4
+}
+
+# 202
+{ "jobId": "tmtymcgak0j2m", "status": "running", "poll": "/v2/l3/jobs/tmtymcgak0j2m" }</pre>
+</div>
+<div class="ep">
+  <div class="head"><span class="m POST">POST</span><span class="path">/v2/l3/generate/batch</span><span class="tag">批量衍生</span></div>
+<pre>{ "items": [ { "bgFileId": "…", "productFileId": "…", "copySlots": {} }, … ] }</pre>
+</div>
+<div class="ep">
+  <div class="head"><span class="m POST">POST</span><span class="path">/v2/l3/rework</span><span class="tag">再加工 · 换商品图</span></div>
+  <p class="desc">对本系统生成的海报更换商品图重新合成（沿用原背景 / 模特 / 文案）。批量版 <code>/v2/l3/rework/batch</code>：<code>{ "items": [ { "l3FileId": "…", "productFileId": "…" } ] }</code></p>
+<pre>{ "l3FileId": "l3_x.png", "productFileId": "product_new.png", "generateVideo": false }</pre>
+</div>
+<div class="ep">
+  <div class="head"><span class="m GET">GET</span><span class="path">/v2/l3/jobs?status=done</span>　<span class="m GET">GET</span><span class="path">/v2/l3/jobs/:id</span></div>
+  <p class="desc">任务列表 / 详情。详情含 <code>stages[]</code>（copy→bg→compose→qc→video）、<code>qc[]</code>（verdict：pass / score / defects[] / repairPlan）、<code>usable</code>、<code>qcScore</code>、<code>l3FileId</code>、<code>copy</code>。</p>
+</div>
+<div class="ep">
+  <div class="head"><span class="m GET">GET</span><span class="path">/v2/l3/assets</span></div>
+  <p class="desc">海报库：桶内容 + 关联任务的 QC 分 / 可用率 / 文案摘要。</p>
+</div>
+<div class="ep">
+  <div class="head"><span class="m DELETE">DELETE</span><span class="path">/v2/l3/assets/:fileId</span>　<span class="m POST">POST</span><span class="path">/v2/l3/assets/delete</span></div>
+  <p class="desc">单个 / 批量删除。</p>
+</div>
+
+<h2 id="l4">L4 视频合成</h2>
+<div class="ep">
+  <div class="head"><span class="m POST">POST</span><span class="path">/v2/l4/generate</span><span class="tag">海报 → 5s 竖版视频 · 异步</span></div>
+<pre>{
+  "l3FileId": "l3_x.png",
+  "prompt": "模特微笑着将商品缓缓递向镜头，文字保持静止",
+  "modelVideoFileId": "model_v.mp4"    // 可选：有则走 H3 Reference 模式，否则 I2VA 首帧模式
+}
+
+# 202 { "jobId": "…", "poll": "/v2/l4/jobs/…" }</pre>
+</div>
+<div class="ep">
+  <div class="head"><span class="m POST">POST</span><span class="path">/v2/l4/generate/batch</span><span class="tag">批量衍生</span></div>
+<pre>{ "items": [ { "l3FileId": "…", "prompt": "…" }, … ] }</pre>
+</div>
+<div class="ep">
+  <div class="head"><span class="m GET">GET</span><span class="path">/v2/l4/jobs</span>　<span class="path">/v2/l4/jobs/:id</span>　<span class="path">/v2/l4/assets</span></div>
+  <p class="desc">任务列表 / 详情 / 视频库（含 prompt 与关联的 l3FileId）。</p>
+</div>
+<div class="ep">
+  <div class="head"><span class="m DELETE">DELETE</span><span class="path">/v2/l4/assets/:fileId</span>　<span class="m POST">POST</span><span class="path">/v2/l4/assets/delete</span></div>
+  <p class="desc">单个 / 批量删除。</p>
+</div>
+
+<h2 id="settings">设置（含四桶配置）</h2>
+<div class="ep">
+  <div class="head"><span class="m GET">GET</span><span class="path">/v2/settings</span>　<span class="m PUT">PUT</span><span class="path">/v2/settings</span></div>
+  <p class="desc">PUT 为增量合并。允许字段：apiKey / baseUrl / textModel / videoModel / videoResolution / qcModel / maxRepairRounds / concurrency / mock / apiKeys / <b>buckets</b>。</p>
+<pre>{
+  "apiKey": "eyJ…", "baseUrl": "https://api.minimax.cn",
+  "textModel": "MiniMax-M3", "videoModel": "MiniMax-H3", "qcModel": "MiniMax-M3",
+  "maxRepairRounds": 2, "concurrency": 2, "mock": false,
+  "apiKeys": ["my-client-key"],
+  "buckets": {
+    "l1": { "driver": "local" },
+    "l2": { "driver": "oss", "endpoint": "https://oss-cn-beijing.aliyuncs.com",
+            "bucket": "jd-l2", "accessKeyId": "AK", "secretAccessKey": "SK",
+            "region": "oss-cn-beijing", "publicBaseUri": "https://cdn.example.com/l2" },
+    "l3": { "driver": "local" },
+    "l4": { "driver": "local" }
+  }
+}</pre>
+  <p class="desc">每桶字段：driver(local|oss) / endpoint / bucket / accessKeyId / secretAccessKey / region / publicBaseUri / forcePathStyle。配置 publicBaseUri 后资源 URL 直接走 CDN 前缀。</p>
+</div>
+<div class="ep">
+  <div class="head"><span class="m POST">POST</span><span class="path">/v2/buckets/:bucket/test</span><span class="tag">连通性测试</span></div>
+<pre>{ "ok": true, "driver": "oss", "objects": 12 }</pre>
+</div>
+<div class="ep">
+  <div class="head"><span class="m POST">POST</span><span class="path">/v2/buckets/:bucket/sync</span><span class="tag">桶内容对账</span></div>
+  <p class="desc">全量列举一次桶（OSS 循环翻页取全），把索引之外的对象补录进元数据（l1 按前缀推断 category）。列表接口零 OSS 请求，依赖此接口或正常读写流程维护的本地索引。</p>
+<pre>{ "ok": true, "objects": 12, "added": 3 }</pre>
+</div>
+
+<h2 id="skills">技能（注入 pi Agent）</h2>
+<p class="desc">技能 = 上传的 Markdown 文档，注入 QC 裁判评审上下文（相当于给裁判装「平台规范手册」）；MOCK 模式不受影响。多文件一次上传即为批量。</p>
+<div class="ep">
+  <div class="head"><span class="m POST">POST</span><span class="path">/v2/skills</span><span class="tag">multipart · .md/.txt</span></div>
+<pre>curl -X POST http://localhost:8788/v2/skills -F files=@京东双11海报设计规范.md
+
+# 201 { "items": [ { "id": "skill_x.md", "name": "京东双11海报设计规范", "enabled": true, "size": 1024 } ] }</pre>
+</div>
+<div class="ep">
+  <div class="head"><span class="m GET">GET</span><span class="path">/v2/skills</span>　<span class="m POST">POST</span><span class="path">/v2/skills/:id/enabled</span>　<span class="m DELETE">DELETE</span><span class="path">/v2/skills/:id</span></div>
+  <p class="desc">列表 / 启停（<code>{ "enabled": false }</code>）/ 删除。</p>
+</div>
+
+<h2 id="minimax">附：底层 MiniMax 调用（服务端出站）</h2>
+<div class="ep">
+  <div class="head"><span class="path" style="color:var(--deep)">M3 · Anthropic 兼容 Messages API</span></div>
+<pre>POST {base}/anthropic/v1/messages        # 鉴权 Authorization: Bearer &lt;key&gt;
+{ "model": "MiniMax-M3", "system": "…", "messages": [...],
+  "max_tokens": 32768, "thinking": { "type": "adaptive" } }
+# 响应 content[] 内容块数组，取 type=text 拼接；thinking 块自动过滤
+# 用途：文案 JSON（disabled）/ L2 HTML 生成（adaptive）/ QC 视觉（base64 image 块）</pre>
+</div>
+<div class="ep">
+  <div class="head"><span class="path" style="color:var(--deep)">H3 · 视频 v2</span></div>
+<pre>POST {base}/v2/video_generation          # content 数组：text 必填 + 图片/视频参考
+  # I2VA 首帧： { type:"image_url", image_url:{url}, role:"first_frame" }
+  # R2VA 参考： { role:"reference_video" } / { role:"reference_image" }（与首尾帧互斥）
+  # resolution(768P|2K) 与 duration(4~15s) 必填
+→ { "task_id": "…" }
+GET  {base}/v2/query/video_generation/{task_id}
+→ { "task": { "status": "queued|running|succeeded|failed|cancelled",
+              "content": { "url": "https://…mp4" }, "error": { "code", "message" } } }</pre>
+</div>
+<div class="ep">
+  <div class="head"><span class="path" style="color:var(--deep)">image-01 · 生图（AIGC 背景备用）</span></div>
+<pre>POST {base}/v1/image_generation          # response_format: base64 → Buffer[]</pre>
+</div>
+
+<h2 id="v1">附：v1 兼容接口</h2>
+<p class="desc">旧单品流水线与批量矩阵接口保持可用，鉴权方式与 v2 相同：</p>
+<div class="ep">
+  <div class="head"><span class="m POST">POST</span><span class="path">/v1/jobs</span>　<span class="m POST">POST</span><span class="path">/v1/jobs/batch</span>　<span class="m GET">GET</span><span class="path">/v1/jobs/:id</span></div>
+  <p class="desc">异步 job + webhook 回调（onTaskChange）；batch 支持商品 × 模特矩阵。详见 README。</p>
+</div>
+
+<div class="foot">
+  <span>素材工厂 v2 · 双11 京东投流素材 AIGC</span>
+  <span>完整架构图见 docs/architecture-v2.html · 本文档源码 docs/API.md</span>
+</div>
+
+</div>
+</body>
+</html>

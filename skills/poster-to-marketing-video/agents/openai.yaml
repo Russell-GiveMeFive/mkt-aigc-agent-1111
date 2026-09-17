@@ -1,0 +1,4 @@
+interface:
+  display_name: "静态海报营销视频"
+  short_description: "将静态营销海报转换为严格素材受限的轻动效竖版营销视频"
+  default_prompt: "使用 $poster-to-marketing-video 将选中的静态海报转成营销视频：背景与相框保持锁定，商品通过透明图层原地呼吸；仅让海报中已有烟雾缓慢流动，不新增视觉元素。"

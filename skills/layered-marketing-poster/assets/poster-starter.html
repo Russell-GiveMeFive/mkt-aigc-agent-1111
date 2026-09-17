@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>分层营销海报</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; width: 100%; min-height: 100%; background: #171417; }
+    body { display: grid; place-items: start center; overflow: auto; }
+    #poster { position: relative; overflow: hidden; isolation: isolate; }
+    #poster > img { position: absolute; display: block; max-width: none; user-select: none; }
+    .background { inset: 0; width: 100%; height: 100%; object-fit: fill; z-index: 0; }
+  </style>
+</head>
+<body>
+  <main id="poster" aria-label="营销海报"></main>
+  <script>
+    // Replace this object and keep a matching layout.json beside the HTML.
+    const POSTER_CONFIG = {
+      width: 1080,
+      height: 1920,
+      background: "file:///ABSOLUTE/PATH/background.png",
+      layers: [
+        {
+          id: "title",
+          role: "title",
+          src: "file:///ABSOLUTE/PATH/title.png",
+          sourceWidth: 1080,
+          sourceHeight: 1920,
+          contentBox: [180, 250, 900, 600],
+          anchor: "center",
+          target: [540, 425],
+          requestedCenter: [540, 425],
+          strictPosition: false,
+          scale: 1,
+          requestedScale: 1,
+          strictScale: false,
+          opacity: 1,
+          zIndex: 30
+        }
+      ]
+    };
+
+    const anchorPoint = (box, anchor) => {
+      const [l, t, r, b] = box;
+      const points = {
+        "top-left": [l, t], "top-center": [(l + r) / 2, t], "top-right": [r, t],
+        "center-left": [l, (t + b) / 2], "center": [(l + r) / 2, (t + b) / 2],
+        "center-right": [r, (t + b) / 2], "bottom-left": [l, b],
+        "bottom-center": [(l + r) / 2, b], "bottom-right": [r, b]
+      };
+      if (!points[anchor]) throw new Error(`Unknown anchor: ${anchor}`);
+      return points[anchor];
+    };
+
+    const poster = document.querySelector("#poster");
+    poster.style.width = `${POSTER_CONFIG.width}px`;
+    poster.style.height = `${POSTER_CONFIG.height}px`;
+
+    const background = new Image();
+    background.className = "background";
+    background.dataset.role = "background";
+    background.src = POSTER_CONFIG.background;
+    background.alt = "";
+    poster.append(background);
+
+    for (const layer of POSTER_CONFIG.layers) {
+      const scale = Number(layer.scale);
+      if (!Number.isFinite(scale) || scale <= 0) {
+        throw new Error(`Invalid scale for ${layer.id}: ${layer.scale}`);
+      }
+      if (layer.strictScale) {
+        const requestedScale = Number(layer.requestedScale);
+        if (!Number.isFinite(requestedScale) || Math.abs(scale - requestedScale) > 1e-9) {
+          throw new Error(
+            `Strict scale mismatch for ${layer.id}: requested ${layer.requestedScale}, configured ${layer.scale}`
+          );
+        }
+      }
+      const anchor = layer.anchor || "center";
+      if (layer.strictPosition) {
+        if (anchor !== "center") {
+          throw new Error(`Strict geometry-center positioning requires anchor=center for ${layer.id}`);
+        }
+        const requestedCenter = layer.requestedCenter;
+        if (!Array.isArray(requestedCenter) || requestedCenter.length !== 2 ||
+            Math.abs(layer.target[0] - requestedCenter[0]) > 1e-9 ||
+            Math.abs(layer.target[1] - requestedCenter[1]) > 1e-9) {
+          throw new Error(`Strict center mismatch for ${layer.id}`);
+        }
+      }
+      const [ax, ay] = anchorPoint(layer.contentBox, anchor);
+      const image = new Image();
+      image.id = layer.id;
+      image.dataset.role = layer.role;
+      image.dataset.appliedScale = String(scale);
+      image.dataset.requestedScale = String(layer.requestedScale ?? scale);
+      image.dataset.strictScale = String(Boolean(layer.strictScale));
+      image.dataset.contentBox = layer.contentBox.join(",");
+      image.dataset.sourceWidth = String(layer.sourceWidth);
+      image.dataset.sourceHeight = String(layer.sourceHeight);
+      image.dataset.anchor = anchor;
+      image.dataset.targetX = String(layer.target[0]);
+      image.dataset.targetY = String(layer.target[1]);
+      image.dataset.strictPosition = String(Boolean(layer.strictPosition));
+      image.src = layer.src;
+      image.alt = "";
+      image.style.left = `${layer.target[0] - ax * scale}px`;
+      image.style.top = `${layer.target[1] - ay * scale}px`;
+      image.style.width = `${layer.sourceWidth * scale}px`;
+      image.style.height = `${layer.sourceHeight * scale}px`;
+      image.style.opacity = `${layer.opacity ?? 1}`;
+      image.style.zIndex = `${layer.zIndex ?? 10}`;
+      if (layer.filter) image.style.filter = layer.filter;
+      if (layer.mixBlendMode) image.style.mixBlendMode = layer.mixBlendMode;
+      poster.append(image);
+    }
+  </script>
+</body>
+</html>

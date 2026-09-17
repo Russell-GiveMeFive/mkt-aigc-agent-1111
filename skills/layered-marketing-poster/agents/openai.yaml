@@ -1,0 +1,6 @@
+interface:
+  display_name: "分层营销海报"
+  short_description: "按底版尺寸组合标题、商品、水印与可选模特，并输出 HTML 和 PNG"
+  brand_color: "#C94E8A"
+  default_prompt: "使用 $layered-marketing-poster 根据我提供的底版、标题、商品和水印素材生成营销海报 HTML 与 PNG。"
+

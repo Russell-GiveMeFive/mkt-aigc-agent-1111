@@ -1,0 +1,111 @@
+[
+  {
+    "id": "tmu0m8n01y2k2",
+    "status": "done",
+    "stages": [
+      {
+        "key": "copy",
+        "status": "done",
+        "note": "mock"
+      },
+      {
+        "key": "bg",
+        "status": "done"
+      },
+      {
+        "key": "compose",
+        "status": "done"
+      },
+      {
+        "key": "qc",
+        "status": "done",
+        "note": "mock-heuristic 100分 · 通过"
+      },
+      {
+        "key": "video",
+        "status": "skipped"
+      }
+    ],
+    "createdAt": 1789352434801,
+    "updatedAt": 1789352434973,
+    "kind": "pipeline",
+    "v2": {
+      "bgFileId": "l2bg_mu0m8myfd7e9bf.png",
+      "productFileId": "product_mu0m8mz96ded64.png"
+    },
+    "productId": "product_mu0m8mz96ded64.png",
+    "styleId": null,
+    "options": {
+      "generateVideo": false
+    },
+    "meta": {
+      "name": "合成背景 9/14 10:20",
+      "source": "v2"
+    },
+    "results": {
+      "copy": {
+        "headline": "双11抢先购\nproduct_ 心动好价",
+        "productName": "product_",
+        "sub": "默认版式限定礼遇",
+        "price": "¥299",
+        "oldPrice": "499",
+        "cta": "立即抢购",
+        "promo": "双11抢先购 立减进行中",
+        "videoPrompt": "画面中心的商品向镜头方向缓缓递出靠近并轻微旋转，模特与背景轻微视差跟随，顶部门头带、节日行与大字标题保持完全静止，整体氛围光缓慢流动",
+        "source": "mock"
+      },
+      "bgSource": "l2-bucket",
+      "styleName": "平台合成背景",
+      "bg": "/files/outputs/tmu0m8n01y2k2/bg.png",
+      "poster": "/files/outputs/tmu0m8n01y2k2/poster.png",
+      "l3FileId": "l3_mu0m8n3wf3f93e.png",
+      "l3Url": "/v2/files/l3/l3_mu0m8n3wf3f93e.png",
+      "usable": true,
+      "qcScore": 100
+    },
+    "qc": [
+      {
+        "round": 0,
+        "verdict": {
+          "pass": true,
+          "score": 100,
+          "defects": [],
+          "repairPlan": {
+            "stage": null,
+            "action": null
+          },
+          "source": "mock-heuristic"
+        },
+        "at": 1789352434973
+      }
+    ]
+  },
+  {
+    "id": "tmu0m8rpk0nqc",
+    "status": "done",
+    "stages": [
+      {
+        "key": "video",
+        "status": "done"
+      }
+    ],
+    "createdAt": 1789352440904,
+    "updatedAt": 1789352441497,
+    "kind": "video",
+    "v2": {
+      "l3FileId": "l3_mu0m8n3wf3f93e.png"
+    },
+    "options": {
+      "generateVideo": true,
+      "copySlots": {
+        "videoPrompt": "x"
+      }
+    },
+    "results": {
+      "poster": "/files/outputs/tmu0m8rpk0nqc/poster.png",
+      "video": "/files/outputs/tmu0m8rpk0nqc/video.mp4",
+      "l4FileId": "l4_mu0m8s60e6644c.mp4",
+      "l4Url": "/v2/files/l4/l4_mu0m8s60e6644c.mp4"
+    }
+  }
+]
