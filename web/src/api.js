@@ -34,7 +34,7 @@ export const api = {
   meta: () => jfetch('/v2/meta'),
   settings: () => jfetch('/v2/settings'),
   prompts: () => jfetch('/v2/prompts'),
-  logs: (q = {}) => jfetch(`/v2/logs?${new URLSearchParams(q)}`),
+  logs: (q = {}) => jfetch(`/v2/logs?${qs(q)}`), // qs 会跳过 undefined/空值（URLSearchParams 会把 undefined 序列化成 'undefined' 导致后端过滤成 0 条）
   revealSettings: () => jfetch('/v2/settings?reveal=1'),
   saveSettings: (patch) => jfetch('/v2/settings', { method: 'PUT', body: JSON.stringify(patch) }),
   testBucket: (b) => jfetch(`/v2/buckets/${b}/test`, { method: 'POST' }),
