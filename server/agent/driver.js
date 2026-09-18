@@ -150,7 +150,7 @@ export function parseJsonLoose(text) {
  * - 最多 3 次工具调用；pi 主路失败降级为调用方自行处理
  * 返回 { text, skillsLoaded: ['S1', ...], rounds }
  */
-export async function askWithSkills({ system, text, catalog = [], maxTokens = 32768, thinking = 'disabled', log = {} }) {
+export async function askWithSkills({ system, text, catalog = [], maxTokens = 32768, thinking = 'disabled', log = {}, images = [] }) {
   const cfg = effective()
   if (!cfg.apiKey) throw new Error('未配置 API Key（Agent 调用需要）')
   const traceId = log.traceId || newTrace()
@@ -166,11 +166,18 @@ export async function askWithSkills({ system, text, catalog = [], maxTokens = 32
   const catalogText = catalog.length
     ? catalog.map((c) => `${c.key}: ${c.name}（${c.chars} 字）— ${c.desc}`).join('\n')
     : '（当前无已启用技能——本次任务不提供 load_skill 工具，直接开始生成）'
-  const messages = [{
-    role: 'user',
-    content: `${text}\n\n可用技能目录（先用 load_skill 工具加载其中 1~3 个与本次任务最相关的技能全文，再开始生成）：\n${catalogText || '（无）'}`,
-    timestamp: Date.now(),
-  }]
+  const fullText = `${text}\n\n可用技能目录（先用 load_skill 工具加载其中 1~3 个与本次任务最相关的技能全文，再开始生成）：\n${catalogText || '（无）'}`
+  // images: dataURL 数组 → anthropic 多模态 content blocks（图随首条 user 消息附加）
+  const userContent = images.length
+    ? [
+        ...images.slice(0, 6).map((dataUrl) => {
+          const m = /^data:([^;]+);base64,(.*)$/s.exec(dataUrl) || []
+          return { type: 'image', data: m[2] || '', mimeType: m[1] || 'image/png' } // pi-ai ImageContent：裸 base64 + mimeType
+        }),
+        { type: 'text', text: fullText },
+      ]
+    : fullText
+  const messages = [{ role: 'user', content: userContent, timestamp: Date.now() }]
   const loaded = []
   let nudged = false
   try {
@@ -203,8 +210,8 @@ export async function askWithSkills({ system, text, catalog = [], maxTokens = 32
       for (const call of calls) {
         const key = call.arguments?.key
         const body = skillTextByKey(key, log.scope || 'all')
-        loaded.push(key)
-        logEvent({ ...baseLog, stage: `${log.stage || 'agent'}·load_skill`, m3Trace: pickTraceHeaders(m3Trace), status: body ? 'ok' : 'error', note: `${key}(${body ? body.length + '字' : '未找到'})` })
+        if (body) loaded.push(key) // 只有真实取到全文才计入 skillsLoaded（停用/不存在的 key 不污染记录）
+        logEvent({ ...baseLog, stage: `${log.stage || 'agent'}·load_skill`, m3Trace: pickTraceHeaders(m3Trace), status: body ? 'ok' : 'error', note: `${key}(${body ? body.length + '字' : '未找到——可能已停用或不在目录'})` })
         messages.push({
           role: 'toolResult',
           toolCallId: call.id,

@@ -58,6 +58,7 @@ export default function L3({ goTab }) {
   const [l2pipeline, setL2pipeline] = useState([])
   const [l1, setL1] = useState([])
   const [assets, setAssets] = useState({ items: [], page: 1, pages: 1, total: 0 })
+  const [delSel3, setDelSel3] = useState([])
   const [jobs, setJobs] = useState({ items: [], page: 1, pages: 1, total: 0 })
   const [assetPage, setAssetPage] = useState(1)
   const [jobPage, setJobPage] = useState(1)
@@ -152,7 +153,7 @@ export default function L3({ goTab }) {
       <div className="card">
         <h3>L3 · 海报合成 - 二次加工 <span className="mono dim" style={{ fontSize: 10.5 }}>LEVEL 3 · 严格版式合成 + QC 裁判</span></h3>
         <div className="dim" style={{ fontSize: 12.5 }}>
-          三部分：<b>① 管线生成</b> —— L2 中标记「生产管线」的背景 + 商品 + 模特 + 文案槽位 → 合成 + QC 裁判 + 修复 ≤2 轮 → 存 L3 桶；<b>⤴ 直通</b> —— 不选商品/模特，选中 L2 背景「直接作为最终海报」存 L3 桶；<b>② 再加工</b> —— 对已有海报更换商品图重新合成。
+          三部分：<b>① 管线生成</b> —— L2 中标记「生产管线」的背景 + 商品 + 文案槽位 → 合成 + QC 裁判 + 修复 ≤2 轮 → 存 L3 桶；<b>⤴ 直通</b> —— 不选商品，选中 L2 背景「直接作为最终海报」存 L3 桶；<b>② 再加工</b> —— 对已有海报更换商品图重新合成。
         </div>
       </div>
       <div className="sectionGap" />
@@ -183,17 +184,6 @@ export default function L3({ goTab }) {
               <AssetCard key={a.fileId} item={a} selected={productId === a.fileId} onSelect={() => setProductId(productId === a.fileId ? '' : a.fileId)} />
             ))}
             {!products.length && <div className="jumpHint">基础素材页还没有商品图 · 去上传</div>}
-          </div>
-          <div className="sectionGap" />
-          <div className="subHead"><b>模特图</b> L1 · 可选</div>
-          <div className="pickGrid pickScroll">
-            <div className={`emptySlot ${modelId === '' ? 'sel' : ''}`} onClick={() => setModelId('')}>
-              <span className="ico">⌀</span>
-              不用模特
-            </div>
-            {withDisplayNames(models).map((a) => (
-              <AssetCard key={a.fileId} item={a} selected={modelId === a.fileId} onSelect={() => setModelId(a.fileId)} />
-            ))}
           </div>
         </div>
 
@@ -230,7 +220,15 @@ export default function L3({ goTab }) {
       <div className="sectionGap" />
 
       <div className="card">
-        <h3>海报库 <span className="mono dim" style={{ fontSize: 10.5 }}>{assets.total}</span></h3>
+        <h3>海报库 <span className="mono dim" style={{ fontSize: 10.5 }}>{assets.total}</span>
+          {(delSel3 || []).length > 0 && (
+            <button className="btn sm" style={{ marginLeft: 10, borderColor: '#f472b6', color: '#f9a8d4' }} onClick={async () => {
+              if (!confirm(`删除 ${delSel3.length} 张海报？`)) return
+              for (const fid of delSel3) { try { await api.deleteL3(fid) } catch (e) { alert(`删除 ${fid} 失败：` + e.message) } }
+              setDelSel3([]); load()
+            }}>删除选中 ({delSel3.length})</button>
+          )}
+        </h3>
         {assets.items.length === 0 ? (
           <div className="emptyState">还没有海报</div>
         ) : (
@@ -244,15 +242,15 @@ export default function L3({ goTab }) {
                 </div>
               ))}
               {withDisplayNames(assets.items).map((a) => (
-                <div key={a.fileId} className="pickCard poster" style={{ position: 'relative' }} onClick={() => openPreview(a)}>
+                <div key={a.fileId} className={`pickCard poster ${(delSel3 || []).includes(a.fileId) ? 'checkSel' : ''}`} style={{ position: 'relative' }} onClick={() => openPreview(a)}>
                   <img src={a.url} alt={a.name} />
                   <button className="pvBtn" title="预览大图" onClick={(e) => { e.stopPropagation(); openPreview(a) }}>⤢</button>
                   <span className={`tag ${a.usable ? 'ok' : a.usable === false ? 'err' : ''}`} style={{ position: 'absolute', top: 6, left: 6, fontSize: 9 }}>
                     {a.usable == null ? '—' : `${a.usable ? '可用' : '不合格'} ${a.qcScore ?? ''}`}
                   </span>
+                  <span className={`cardCheck ${(delSel3 || []).includes(a.fileId) ? 'on' : ''}`} onClick={(e) => { e.stopPropagation(); setDelSel3((m) => m.includes(a.fileId) ? m.filter((x) => x !== a.fileId) : [...m, a.fileId]) }}>{(delSel3 || []).includes(a.fileId) ? '✓' : ''}</span>
                   <div className="nm">
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.name}</span>
-                    <button className="del" onClick={async (e) => { e.stopPropagation(); if (confirm(`删除 ${a.name}?`)) { try { await api.deleteL3(a.fileId) } catch (err) { alert('删除失败：' + err.message) } load() } }}>×</button>
                   </div>
                 </div>
               ))}

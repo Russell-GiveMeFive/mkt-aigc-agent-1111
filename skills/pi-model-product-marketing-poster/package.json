@@ -1,0 +1,17 @@
+{
+  "name": "pi-model-product-marketing-poster",
+  "version": "5.2.0",
+  "private": true,
+  "description": "Deterministic Pi package for exact-size model and product marketing posters.",
+  "keywords": ["pi-package", "poster", "marketing", "image-layout"],
+  "type": "module",
+  "pi": {
+    "extensions": ["./extensions/poster-tool.ts"],
+    "skills": ["./SKILL.md"],
+    "prompts": ["./prompts/model-product-poster.md"]
+  },
+  "peerDependencies": {
+    "@mariozechner/pi-ai": "*",
+    "@mariozechner/pi-coding-agent": "*"
+  }
+}

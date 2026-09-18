@@ -26,7 +26,7 @@ const DEFAULTS = {
   // QC 修复环路轮数上限
   maxRepairRounds: 2,
   mock: true, // 无 Key 时自动 mock；也可强制 true
-  concurrency: 2, // 批量任务并发
+  concurrency: 0, // 批量任务并发；0 = 不限制（H3 为异步任务 API，全部立即提交，由 MiniMax 服务端调度）
   // 对外 /v1 接口的调用方 Key 列表（空 = 鉴权关闭，仅限开发）
   apiKeys: [],
   // 四桶存储：l1 基础素材 / l2 平台合成素材 / l3 商家最终海报 / l4 视频合成

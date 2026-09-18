@@ -21,10 +21,10 @@ export function withDisplayNames(items) {
   })
 }
 
-export function AssetCard({ item, video, selected, onSelect, onDelete, poster }) {
+export function AssetCard({ item, video, selected, onSelect, onDelete, poster , checked, onCheck }) {
   return (
     <div
-      className={`pickCard ${poster ? 'poster' : ''} ${selected ? 'sel' : ''}`}
+      className={`pickCard ${poster ? 'poster' : ''} ${selected ? 'sel' : ''} ${checked ? 'checkSel' : ''}`}
       style={{ cursor: onSelect ? 'pointer' : 'pointer' }}
       onClick={onSelect || (() => openPreview(item))}
     >
@@ -34,11 +34,11 @@ export function AssetCard({ item, video, selected, onSelect, onDelete, poster })
         <img src={item.url} alt={item.name} />
       )}
       <button className="pvBtn" title="预览大图" onClick={(e) => { e.stopPropagation(); openPreview(item) }}>⤢</button>
+      {onCheck && (
+        <span className={`cardCheck ${checked ? 'on' : ''}`} onClick={(e) => { e.stopPropagation(); onCheck() }}>{checked ? '✓' : ''}</span>
+      )}
       <div className="nm">
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name}</span>
-        {onDelete && (
-          <button className="del" title="删除" onClick={async (e) => { e.stopPropagation(); if (confirm(`删除 ${item.name}?`)) onDelete() }}>×</button>
-        )}
       </div>
     </div>
   )
@@ -64,6 +64,15 @@ export default function L1() {
   const [busyCat, setBusyCat] = useState(null)
   const [msg, setMsg] = useState('')
   const refs = useRef({})
+  const [delSel, setDelSel] = useState({}) // 分类 → 勾选待删 fileIds
+  const batchDel = async (key) => {
+    const ids = delSel[key] || []
+    if (!ids.length) return
+    if (!confirm(`删除 ${ids.length} 个素材？`)) return
+    for (const fid of ids) { try { await api.deleteL1(fid) } catch (e) { alert(`删除 ${fid} 失败：` + e.message) } }
+    setDelSel((m) => ({ ...m, [key]: [] }))
+    loadCat(key, 1)
+  }
 
   const loadCat = async (key, page = 1) => {
     const r = await api.l1Assets({ category: key, page, pageSize: PAGE_SIZE })
@@ -107,6 +116,9 @@ export default function L1() {
               <h3 style={{ margin: 0 }}>
                 {label} <span className="mono dim" style={{ fontSize: 10.5 }}>{key} · {st.total}</span>
                 <span style={{ flex: 1 }} />
+                {(delSel[key] || []).length > 0 && (
+                  <button className="btn sm" style={{ borderColor: '#f472b6', color: '#f9a8d4' }} disabled={busyCat === key} onClick={() => batchDel(key)}>删除选中 ({(delSel[key] || []).length})</button>
+                )}
                 <button className="btn sm" disabled={busyCat === key} onClick={() => refs.current[key]?.click()}>
                   {busyCat === key ? <span className="spin" /> : '＋'} 批量上传
                 </button>
@@ -123,7 +135,8 @@ export default function L1() {
                         key={a.fileId}
                         item={a}
                         video={a.fileId.endsWith('.mp4')}
-                        onDelete={async () => { await api.deleteL1(a.fileId); loadCat(key, st.page) }}
+                        checked={(delSel[key] || []).includes(a.fileId)}
+                        onCheck={() => setDelSel((m) => { const cur = m[key] || []; return { ...m, [key]: cur.includes(a.fileId) ? cur.filter((x) => x !== a.fileId) : [...cur, a.fileId] } })}
                       />
                     ))}
                   </div>
