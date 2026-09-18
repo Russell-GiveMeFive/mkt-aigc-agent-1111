@@ -3,12 +3,12 @@ import { api } from '../api.js'
 
 const BIZ = [
   ['', '全部业务'],
+  ['l4video', 'L4 视频合成'],
   ['l2compose', 'L2 背景合成'],
-  ['l3copy', 'L3 文案'],
-  ['l3bg', 'L3 背景'],
-  ['l3compose', 'L3 合成'],
-  ['l3qc', 'L3 QC'],
-  ['l4video', 'L4 视频'],
+  ['l3copy', 'L3 文案（已下线·历史）'],
+  ['l3bg', 'L3 背景（已下线·历史）'],
+  ['l3compose', 'L3 合成（已下线·历史）'],
+  ['l3qc', 'L3 QC（已下线·历史）'],
   ['driver', '裸 Agent 调用'],
 ]
 
