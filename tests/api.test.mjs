@@ -451,6 +451,41 @@ test('鉴权：设置 apiKeys 后无 Key 请求 → 401，带 Key → 200', asyn
   assert.equal((await fetch(`${B}/v2/l1/assets`)).status, 200)
 })
 
+test('L4 绑定模特图：modelFileId 透传进任务（v2 记录）', async () => {
+  const upM = await upload('model', 'data/assets/l1-plate/l1-plate-1.png', '测试模特')
+  assert.equal(upM.status, 201)
+  const mid = upM.data.items[0].fileId
+  assert.match(mid, /^model_/)
+  const { status, data } = await j('POST', '/v2/l4/generate', { l3FileId: shared.l3, prompt: '有模特提示词测试', modelFileId: mid })
+  assert.equal(status, 202)
+  const job = await pollJob(data.poll)
+  assert.equal(job.status, 'done')
+  assert.equal(job.modelFileId, mid)
+})
+
+test('L4 l2 pipeline 直通：l2bg_ 前缀海报可生成视频（双桶兼容）', async () => {
+  const { data: pl } = await j('GET', '/v2/l2/assets?pipeline=true&pageSize=1')
+  assert.ok(pl.items[0], '需要一张生产管线标记的 L2 海报')
+  const l2bg = pl.items[0].fileId
+  assert.match(l2bg, /^l2bg_/)
+  const { status, data } = await j('POST', '/v2/l4/generate', { l3FileId: l2bg, prompt: 'l2 直通视频' })
+  assert.equal(status, 202)
+  const job = await pollJob(data.poll)
+  assert.equal(job.status, 'done')
+  assert.ok(job.l4FileId?.startsWith('l4_'))
+})
+
+test('L2 pipeline 过滤语义：true/1/0 三种取值', async () => {
+  const t1 = await j('GET', '/v2/l2/assets?pipeline=true&pageSize=200')
+  const t2 = await j('GET', '/v2/l2/assets?pipeline=1&pageSize=200')
+  const t3 = await j('GET', '/v2/l2/assets?pipeline=0&pageSize=200')
+  assert.equal(t1.status, 200); assert.equal(t2.status, 200); assert.equal(t3.status, 200)
+  const ids1 = new Set(t1.data.items.map((x) => x.fileId))
+  const ids2 = new Set(t2.data.items.map((x) => x.fileId))
+  assert.deepEqual([...ids1].sort(), [...ids2].sort())
+  for (const it of t3.data.items) assert.notEqual(it.pipeline, true)
+})
+
 test('清理：删除全部测试素材', async () => {
   const ids = [shared.pattern, shared.plate, shared.product, shared.l2bg, shared.l2html, ...shared.l2extra, shared.l3, shared.l3rework, shared.l4]
   for (const [bucket, method] of [['l1', 'l1'], ['l2', 'l2'], ['l3', 'l3'], ['l4', 'l4']]) {

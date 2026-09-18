@@ -6,7 +6,7 @@ import { DATA_DIR, OUTPUTS_DIR, ASSETS_DIR, effective } from './config.js'
 import { getStyle } from './styles.js'
 import { renderMockBackground, composePoster } from './compositor.js'
 import { generateCopy } from './copywriter.js'
-import { generateImage, createVideoTask, createVideoTaskReference, queryVideoTask } from './minimax.js'
+import { generateImage, createVideoTask, createVideoTaskReference, createVideoTaskModelRef, queryVideoTask } from './minimax.js'
 import { askWithSkills } from './agent/driver.js'
 import { skillCatalog } from './skills.js'
 import { logEvent } from './agentlog.js'
@@ -40,11 +40,14 @@ try {
 } catch {
   tasks = []
 }
-// 重启恢复：running/queued → failed(中断)
+// 重启恢复：已提交 H3（有 videoTaskId）的任务继续轮询取片；未提交的标记可重新提交
 for (const t of tasks) {
-  if (t.status === 'running' || t.status === 'queued') {
+  if ((t.status === 'running' || t.status === 'queued') && t.results?.videoTaskId) {
+    t.status = 'running'
+    setTimeout(() => { enqueue(() => resumeVideoTask(t)) }, 200) // 延迟到模块求值完毕（避开 running TDZ）
+  } else if (t.status === 'running' || t.status === 'queued') {
     t.status = 'failed'
-    t.error = '服务重启导致中断，可重新提交'
+    t.error = '服务重启导致中断（H3 未提交），可重新提交'
   }
 }
 
@@ -132,6 +135,20 @@ const MOTION_DIRECTOR_SYSTEM = `你是营销视频运动导演。根据视频技
 - 只允许海报已有像素产生运动：相机呼吸（0.4%~1.2% 缓推）、≤6px 漂移、光影流动、商品微动（bob/旋转≤0.6°）、标题亮度呼吸；不得发明海报上不存在的元素、人物、文字或特效。
 - 运动必须克制（restrained），避免重影/双边缘；末帧必须是完整构图并定格。
 - 输出 JSON：{"videoPrompt": "一句中文运动描述（≤80字，给 H3 的 text 提示词）", "motionPlan": "动效要点，≤60字"}`
+
+const MOTION_DIRECTOR_MODEL_SYSTEM = `你是营销视频提示词导演（有模特模式）。会话已附加两张图：
+- 图1 = 模特参考图：人物身份、五官、发型、服装、身体比例、初始姿势与合理动作范围的唯一权威。
+- 图2 = 商品营销海报：商品、包装文字、标题、Logo、背景、装饰、色彩、构图与画幅的权威。
+
+先通过 load_skill 加载目录中与「有模特商品视频提示词」最相关的技能（若有指定编号则必须加载指定技能）并严格遵循其输出契约，然后产出可直接提交 MiniMax H3 multi-reference 图生视频的创建提示词。
+
+硬性要求：
+- 人物从第一帧起自然整合进海报场景（不得中途出现），完成一次连续、鲜活、符合原姿势的带货表演：看向观众、表情变化、身体或重心参与、手臂展示；商品向镜头递近形成 hero close-up。
+- 背景烟雾/光影/花瓣/粒子分层定向流动；相框、建筑、桌面、Logo 等固定结构不得缩放或移动。
+- 标题可短促错峰上浮、数字脉冲、高光扫过；不得改字、换字体、变形或持续抖动。
+- 人物脸部、服装、四肢与比例全程稳定；负面约束必须写入：油腻皮肤、塑料感、AI 脸、五官漂移、额外手指、穿模、商品瞬移、整图缩放、镜头推拉。
+
+只输出 JSON：{"videoPrompt": "完整 H3 multi-reference 提示词（中文，含 5 秒时间线、动作原型、人物表演、商品 hero moment、背景流动、标题动效、参考图职责、负面约束）", "motionPlan": "要点，≤80字"}`
 
 const FALLBACK_VIDEOPROMPT = '画面中心的商品向镜头方向缓缓递出靠近并轻微旋转，模特与背景轻微视差跟随，顶部门头带、节日行与大字标题保持完全静止，整体氛围光缓慢流动'
 
@@ -267,16 +284,30 @@ async function stageVideo(task, { copy }) {
     let taskId
     const vo = task.v2?.videoOpts || {}
     const vParams = { aspectRatio: vo.aspectRatio || '3:4', resolution: vo.resolution || '2K', duration: vo.duration || 5 }
-    // motion-agent：M3 以 load_skill(function calling) 读取视频技能 → 产出运动提示词（skill: poster-to-marketing-video 等）
+    // motion-agent：M3 以 load_skill(function calling) 读取视频技能 → 产出运动提示词
+    // 有模特（task.v2.modelFileId）→ 双图多模态（模特参考 + 海报）+ 点名 h3-live-model 技能 → H3 multi-reference 提示词
     let userMotion = copy.videoPrompt || ''
+    const modelFileId = task.v2?.modelFileId || ''
+    let modelImgB64 = ''
+    if (modelFileId) {
+      const mb = await storage.get('l1', modelFileId)
+      if (mb) modelImgB64 = mb.toString('base64')
+      else logEvent({ biz: 'l4video', taskId: task.id, traceId: task.id, stage: 'motion-agent', status: 'warn', note: `绑定的模特图读取失败: ${modelFileId}（回退无模特流程）` })
+    }
     try {
+      // 技能目录 = 启用中的 video 相关技能（skillCatalog 过滤 enabled；GUI 停用即时生效，全部停用则零调用）
       const cat = skillCatalog('video')
+      const isModelImage = !!modelImgB64
+      const mk = isModelImage ? cat.find((c) => /h3-live-model/i.test(c.name || '')) : null
       if (cat.length) {
         const mr = await askWithSkills({
-          system: MOTION_DIRECTOR_SYSTEM,
-          text: `竖版营销海报（画幅即视频画幅）。用户运动描述：${userMotion || '（未填，按技能默认动效语言）'}。比例 ${vParams.aspectRatio}，分辨率 ${vParams.resolution}，时长 ${vParams.duration}s。请输出 JSON。`,
+          system: isModelImage ? MOTION_DIRECTOR_MODEL_SYSTEM : MOTION_DIRECTOR_SYSTEM,
+          text: isModelImage
+            ? `已附加两张图：图1=模特参考图（${modelFileId}），图2=商品营销海报。用户补充描述：${userMotion || '（未填，按技能默认表演语言）'}。比例 ${vParams.aspectRatio}，分辨率 ${vParams.resolution}，时长 ${vParams.duration}s。${mk ? `请优先 load_skill 加载 ${mk.key}（${(mk.name || '').split('·')[0].trim()}）并严格遵循其输出契约。` : ''}请输出 JSON。`
+            : `竖版营销海报（画幅即视频画幅）。用户运动描述：${userMotion || '（未填，按技能默认动效语言）'}。比例 ${vParams.aspectRatio}，分辨率 ${vParams.resolution}，时长 ${vParams.duration}s。请输出 JSON。`,
           catalog: cat,
-          maxTokens: 2048,
+          images: isModelImage ? [`data:image/png;base64,${modelImgB64}`, `data:image/png;base64,${b64}`] : [],
+          maxTokens: isModelImage ? 4096 : 2048,
           thinking: 'adaptive',
           log: { biz: 'l4video', taskId: task.id, traceId: task.id, stage: 'motion-agent' },
         })
@@ -286,58 +317,76 @@ async function stageVideo(task, { copy }) {
           if (pj.videoPrompt) userMotion = pj.videoPrompt
           if (pj.motionPlan) task.results.motionPlan = pj.motionPlan
         } else if (mr.text && mr.text.trim()) {
-          userMotion = mr.text.trim().slice(0, 200)
+          userMotion = mr.text.trim().slice(0, 600)
         }
         task.results.motionAgent = true
-        logEvent({ biz: 'l4video', taskId: task.id, traceId: task.id, stage: 'motion-agent-done', status: 'ok', note: `运动提示词已由 skill 驱动生成：${String(userMotion).slice(0, 80)}` })
+        task.results.motionMode = isModelImage ? 'model-ref' : 'poster-only'
+        logEvent({ biz: 'l4video', taskId: task.id, traceId: task.id, stage: 'motion-agent-done', status: 'ok', note: `运动提示词已由 skill 驱动生成（mode=${task.results.motionMode}，skillsLoaded=${(mr.skillsLoaded || []).join(',') || '无'}）：${String(userMotion).slice(0, 70)}` })
       }
     } catch (e) {
       logEvent({ biz: 'l4video', taskId: task.id, traceId: task.id, stage: 'motion-agent-done', status: 'warn', note: `motion-agent 失败回退用户描述：${String(e.message).slice(0, 120)}` })
     }
-    if (isModelVideo) {
+    if (modelImgB64) {
+      // 模特图绑定 → 双图参考模式（海报 + 模特参考，H3 multi-reference）
+      taskId = await createVideoTaskModelRef({
+        prompt: userMotion || copy.videoPrompt || FALLBACK_VIDEOPROMPT, // motion-agent skill 产出优先，输入框原文仅回退
+        posterUrl: `data:image/png;base64,${b64}`,
+        modelImageUrl: `data:image/png;base64,${modelImgB64}`,
+        ...vParams,
+      })
+    } else if (isModelVideo) {
       // 模特是视频 → H3 Reference 模式（参考视频驱动人物动效 + 海报参考图保版式）
       const mvB64 = modelVideoFileId
         ? (await storage.get('l1', modelVideoFileId))?.toString('base64')
         : fs.readFileSync(assetFilePath(task.modelId)).toString('base64')
       taskId = await createVideoTaskReference({
-        prompt: copy.videoPrompt || FALLBACK_VIDEOPROMPT,
+        prompt: userMotion || copy.videoPrompt || FALLBACK_VIDEOPROMPT, // motion-agent skill 产出优先，输入框原文仅回退
         posterUrl: `data:image/png;base64,${b64}`,
         referenceVideoUrl: `data:video/mp4;base64,${mvB64}`,
         ...vParams,
       })
     } else {
       taskId = await createVideoTask({
-        prompt: copy.videoPrompt || FALLBACK_VIDEOPROMPT,
+        prompt: userMotion || copy.videoPrompt || FALLBACK_VIDEOPROMPT, // motion-agent skill 产出优先，输入框原文仅回退
         firstFrameUrl: `data:image/png;base64,${b64}`,
         ...vParams,
       })
     }
-    logEvent({ biz: 'l4video', taskId: task.id, traceId: task.id, stage: 'h3-submit', status: 'ok', note: `H3 taskId=${taskId} ratio=${vParams.aspectRatio} res=${vParams.resolution} dur=${vParams.duration}s mode=${isModelVideo ? 'reference' : 'first_frame'}` })
+    logEvent({ biz: 'l4video', taskId: task.id, traceId: task.id, stage: 'h3-submit', status: 'ok', note: `H3 taskId=${taskId} ratio=${vParams.aspectRatio} res=${vParams.resolution} dur=${vParams.duration}s mode=${modelImgB64 ? 'model_ref' : isModelVideo ? 'reference' : 'first_frame'}` })
     task.results.videoTaskId = taskId
-    // 轮询最长 8 分钟（v2 状态: queued|running|succeeded|failed|cancelled；兼容 v1 Success/Failed）
-    const deadline = Date.now() + 8 * 60 * 1000
-    let lastPollStatus = ''
-    while (Date.now() < deadline) {
-      await sleep(4000)
-      const q = await queryVideoTask(taskId)
-      if (q.status === 'succeeded' || q.status === 'Success' || q.status === 'success' || q.videoUrl) {
-        await downloadTo(q.videoUrl, videoFile)
-        break
-      }
-      if (q.status === 'failed' || q.status === 'Failed' || q.status === 'cancelled') {
-        throw new Error(`H3 生成失败${q.error ? `(${q.error})` : ''}: ${JSON.stringify(q.raw).slice(0, 200)}`)
-      }
-      // 状态无变化不打日志（避免 4s 一条的轮询垃圾）
-      if (q.status !== lastPollStatus) {
-        lastPollStatus = q.status
-        setStage(task, 'video', 'running', { note: `H3 状态: ${q.status}` })
-      }
-    }
-    if (!fs.existsSync(videoFile)) throw new Error('H3 视频轮询超时(8min)')
+    task.results.finalPrompt = userMotion || copy.videoPrompt || FALLBACK_VIDEOPROMPT
+    await pollH3UntilDone(task, taskId, videoFile)
   }
+  await finalizeVideo(task, videoFile)
+}
+
+/** 轮询 H3 任务直到成功/失败（最长 8 分钟），成功则下载到 videoFile */
+async function pollH3UntilDone(task, taskId, videoFile) {
+  const deadline = Date.now() + 8 * 60 * 1000
+  let lastPollStatus = ''
+  while (Date.now() < deadline) {
+    await sleep(4000)
+    const q = await queryVideoTask(taskId)
+    if (q.status === 'succeeded' || q.status === 'Success' || q.status === 'success' || q.videoUrl) {
+      await downloadTo(q.videoUrl, videoFile)
+      break
+    }
+    if (q.status === 'failed' || q.status === 'Failed' || q.status === 'cancelled') {
+      throw new Error(`H3 生成失败${q.error ? `(${q.error})` : ''}: ${JSON.stringify(q.raw).slice(0, 200)}`)
+    }
+    // 状态无变化不打日志（避免 4s 一条的轮询垃圾）
+    if (q.status !== lastPollStatus) {
+      lastPollStatus = q.status
+      setStage(task, 'video', 'running', { note: `H3 状态: ${q.status}` })
+    }
+  }
+  if (!fs.existsSync(videoFile)) throw new Error('H3 视频轮询超时(8min)')
+}
+
+/** 视频落 L4 桶（文件名用 H3 taskId 便于对账），完成后置 done */
+async function finalizeVideo(task, videoFile) {
   task.results.video = `/files/outputs/${task.id}/video.mp4`
   setStage(task, 'video', 'done', { note: 'H3 视频生成完成' })
-  // v2：视频落 L4 桶——文件名直接用 H3 返回的 taskId（可对账 MiniMax 服务端），无则退回本地 id
   try {
     const l4Name = task.results.videoTaskId ? `l4_${task.results.videoTaskId}.mp4` : `${storage.newFileId('l4')}.mp4`
     const put4 = await storage.put('l4', l4Name, fs.readFileSync(videoFile), 'video/mp4')
@@ -347,6 +396,21 @@ async function stageVideo(task, { copy }) {
     logEvent({ biz: 'l4video', taskId: task.id, traceId: task.id, stage: 'l4-bucket', status: 'ok', note: `H3 taskId 命名: ${put4.fileId}` })
   } catch {}
   setStage(task, 'video', 'done')
+}
+
+/** 重启恢复：不再重提交 H3，直接继续轮询既有 videoTaskId 直到完成落桶 */
+async function resumeVideoTask(task) {
+  try {
+    updateTask(task.id, { status: 'running' })
+    setStage(task, 'video', 'running', { note: `服务重启恢复：继续轮询 H3 ${task.results.videoTaskId}` })
+    logEvent({ biz: 'l4video', taskId: task.id, traceId: task.id, stage: 'resume', status: 'ok', note: `重启恢复：继续轮询 H3 ${task.results.videoTaskId}` })
+    const videoFile = path.join(OUTPUTS_DIR, task.id, 'video.mp4')
+    await pollH3UntilDone(task, task.results.videoTaskId, videoFile)
+    await finalizeVideo(task, videoFile)
+    updateTask(task.id, { status: 'done' })
+  } catch (e) {
+    updateTask(task.id, { status: 'failed', error: e.message })
+  }
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -593,10 +657,10 @@ export function createJobBatch(items) {
 }
 
 /** L4 视频任务：基于已有 L3 海报直接生成视频（不重跑管线） */
-export function createVideoJob({ l3FileId, prompt, modelVideoFileId, videoOpts }) {
+export function createVideoJob({ l3FileId, prompt, modelVideoFileId, modelFileId, videoOpts }) {
   const task = newTask({
     kind: 'video',
-    v2: { l3FileId, modelVideoFileId, videoOpts: videoOpts || {} },
+    v2: { l3FileId, modelVideoFileId, modelFileId, videoOpts: videoOpts || {} },
     options: { generateVideo: true, copySlots: { videoPrompt: prompt } },
     results: {},
     stages: [{ key: 'video', status: 'pending' }],
@@ -608,8 +672,10 @@ export function createVideoJob({ l3FileId, prompt, modelVideoFileId, videoOpts }
 async function runVideoOnly(task) {
   try {
     updateTask(task.id, { status: 'running' })
-    const posterBuf = await storage.get('l3', task.v2.l3FileId)
-    if (!posterBuf) throw new Error(`L3 海报不存在: ${task.v2.l3FileId}`)
+    const posterId = task.v2.l3FileId
+    const posterBucket = String(posterId).startsWith('l2bg_') ? 'l2' : 'l3'
+    const posterBuf = await storage.get(posterBucket, posterId)
+    if (!posterBuf) throw new Error(`海报不存在(${posterBucket}): ${posterId}`)
     const outDir = path.join(OUTPUTS_DIR, task.id)
     fs.mkdirSync(outDir, { recursive: true })
     fs.writeFileSync(path.join(outDir, 'poster.png'), posterBuf)
@@ -627,7 +693,8 @@ let running = 0
 const waitQueue = []
 
 function pump() {
-  const limit = Math.max(1, effective().concurrency)
+  const c = effective().concurrency
+  const limit = (!c || c <= 0) ? Infinity : Math.max(1, c) // 0/未设置 = 不限制
   while (running < limit && waitQueue.length) {
     const job = waitQueue.shift()
     running++

@@ -431,9 +431,9 @@ export function buildV2Router() {
   })
 
   r.post('/l4/generate', async (req, res) => {
-    const { l3FileId, prompt = '', modelVideoFileId, videoOpts } = req.body || {}
+    const { l3FileId, prompt = '', modelVideoFileId, modelFileId, videoOpts } = req.body || {}
     if (!l3FileId) return res.status(400).json({ error: 'l3FileId 必填（L3 海报）' })
-    const task = createVideoJob({ l3FileId, prompt, modelVideoFileId, videoOpts })
+    const task = createVideoJob({ l3FileId, prompt, modelVideoFileId, modelFileId, videoOpts })
     res.status(202).json({ jobId: task.id, status: task.status, poll: `/v2/l4/jobs/${task.id}` })
   })
   r.post('/l4/generate/batch', async (req, res) => {
@@ -456,7 +456,7 @@ export function buildV2Router() {
     const jobs = listTasks({ kind: 'video' }).filter((t) => t.results?.l4FileId)
     const items = metaList('l4').map((it) => {
       const job = jobs.find((t) => t.results.l4FileId === it.fileId)
-      return { ...it, jobId: job?.id || null, l3FileId: job?.v2?.l3FileId || null, prompt: job?.options?.copySlots?.videoPrompt || null }
+      return { ...it, jobId: job?.id || null, l3FileId: job?.v2?.l3FileId || null, prompt: job?.results?.finalPrompt || job?.options?.copySlots?.videoPrompt || null }
     })
     res.json(paginate(items, req.query))
   })
@@ -597,7 +597,10 @@ function jobView(t) {
     poster: t.results?.poster || null,
     video: t.results?.video || null,
     videoTaskId: t.results?.videoTaskId || null,
+    finalPrompt: t.results?.finalPrompt || null,
     videoOpts: t.v2?.videoOpts || null,
+    modelFileId: t.v2?.modelFileId || null,
+    modelVideoFileId: t.v2?.modelVideoFileId || null,
     copy: t.results?.copy || null,
     name: t.meta?.name || null,
     error: t.error || null,

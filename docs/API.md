@@ -141,7 +141,9 @@ curl -X POST http://localhost:8788/v2/l1/assets \
 { "fileIds": ["l2bg_x.png"], "enabled": true }
 ```
 
-### GET /v2/l2/assets?pipeline=1 — 列表（`pipeline=1` 只看管线内）
+### GET /v2/l2/assets?pipeline=1 — 列表（`pipeline=1/true` 只看管线内，`pipeline=0` 只看管线外）
+
+> 「加入生产管线」的 L2 海报即视频合成素材：`POST /v2/l4/generate` 直接传 `l2bg_*` fileId 即可（服务端按前缀双桶兼容，UI 上 L4 页「选择海报」即此数据源）。
 
 ### DELETE /v2/l2/assets/:fileId · POST /v2/l2/assets/delete — 单个 / 批量删除
 
@@ -207,24 +209,33 @@ curl -X POST http://localhost:8788/v2/l1/assets \
 
 ## L4 视频合成
 
-### POST /v2/l4/generate — 海报 → 5s 竖版视频
+### POST /v2/l4/generate — 海报 → 竖版视频（motion-agent skill FC）
 
 ```json
-{ "l3FileId": "l3_x.png", "prompt": "模特微笑着将商品缓缓递向镜头，文字保持静止", "modelVideoFileId": "model_v.mp4" }
+{ "l3FileId": "l3_x.png", "prompt": "模特微笑着将商品缓缓递向镜头，文字保持静止", "modelFileId": "model_z.png", "videoOpts": { "aspectRatio": "3:4", "resolution": "2K", "duration": 5 } }
 ```
 
-- 无 `modelVideoFileId`：H3 I2VA 首帧模式（海报为第一帧）
-- 有 `modelVideoFileId`：H3 Reference 模式（参考视频 + 参考图）
+- `l3FileId`：海报 fileId——接受 `l3_*`（L3 桶）或 `l2bg_*`（L2 桶「生产管线」海报，直通视频，服务端双桶兼容）
+- `modelFileId`：可选，L1 模特**图**绑定 → motion-agent 以双图多模态（模特参考图 + 海报）调 M3，点名加载 `h3-live-model` 类技能（function calling）产出 H3 multi-reference 提示词；H3 走双图参考模式（`reference_image ×2`）
+- `modelVideoFileId`：可选，L1 模特 **mp4** → H3 Reference 模式（参考视频驱动动效）
+- 三种 H3 提交模式（任务详情 `mode` 标注）：`model_ref`（模特图）/ `reference`（模特视频）/ `first_frame`（无模特 I2VA 首帧）
+- `videoOpts`：`aspectRatio`（3:4/9:16/1:1）、`resolution`（768P/1080P/2K）、`duration`（4~15s）
+
+motion-agent 阶段全程记录于 `/v2/logs?biz=l4video`（traceId = 任务 id）：`motion-agent·round`（FC 轮次）、`motion-agent·load_skill`（技能全文拉取）、`motion-agent-done`（mode 与 skillsLoaded）、`h3-submit`（H3 taskId + mode）。
 
 返回 `202`：`{ "jobId": "…", "poll": "/v2/l4/jobs/…" }`
 
 ### POST /v2/l4/generate/batch — 批量
 
 ```json
-{ "items": [ { "l3FileId": "…", "prompt": "…" }, … ] }
+{ "items": [ { "l3FileId": "l2bg_x.png", "prompt": "…", "modelFileId": "model_z.png" }, { "l3FileId": "l3_y.png", "prompt": "…" } ] }
 ```
 
+每项独立携带 `modelFileId`（绑定模特走有模特路线，未绑定走无模特路线），逐张提交。
+
 ### GET /v2/l4/jobs · GET /v2/l4/jobs/:id · GET /v2/l4/assets — 任务 / 视频库
+
+任务详情出参含：`stages`、`videoTaskId`（H3 taskId）、`videoOpts`、**`modelFileId` / `modelVideoFileId`**（本次绑定的模特图/视频）、`motionPlan`、`l4FileId/l4Url`。
 
 ### DELETE /v2/l4/assets/:fileId · POST /v2/l4/assets/delete — 单个 / 批量删除
 

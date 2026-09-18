@@ -158,6 +158,33 @@ export async function createVideoTask({ prompt, firstFrameUrl, duration = 5, asp
 }
 
 /**
+ * 双图参考模式（有模特）：海报（商品/标题/背景/版式）+ 模特参考图（人物身份/服装/姿势）
+ * 走 reference_image ×2，人物按参考图身份整合进海报场景
+ */
+export async function createVideoTaskModelRef({ prompt, posterUrl, modelImageUrl, duration = 5, aspectRatio, resolution }) {
+  const { baseUrl, videoModel, videoResolution } = effective()
+  if (!prompt || !prompt.trim()) throw new Error('H3 创建任务需要非空 text 提示词')
+  const content = [
+    { type: 'text', text: prompt },
+    { type: 'image_url', image_url: { url: posterUrl }, role: 'reference_image' },
+    { type: 'image_url', image_url: { url: modelImageUrl }, role: 'reference_image' },
+  ]
+  const body = await mmFetch(`${baseUrl}/v2/video_generation`, {
+    method: 'POST',
+    body: JSON.stringify({
+      model: videoModel || 'MiniMax-H3',
+      content,
+      resolution: resolution || videoResolution || '768P',
+      duration,
+      ratio: aspectRatio || 'adaptive',
+    }),
+  })
+  const taskId = body?.task_id ?? body?.id
+  if (!taskId) throw new Error(`H3(ModelRef) 未返回 task_id: ${JSON.stringify(body).slice(0, 200)}`)
+  return taskId
+}
+
+/**
  * Reference 模式（r2va）：多模态参考生视频
  * posterUrl→reference_image（≤9张），referenceVideoUrl→reference_video（≤3段，单段2-15s）
  * 与首尾帧模式互斥（content 中不可同时出现 first_frame/last_frame）

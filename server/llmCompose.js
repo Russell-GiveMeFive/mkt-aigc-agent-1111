@@ -166,9 +166,16 @@ export async function composeHtml({ items, instruction, log = {} }) {
   let raw, meta
   try {
     const catalog = skillCatalog('html')
+    // 含模特图时点名模特海报技能（目录 16 条编号靠后，M3 自选易漏——确定性点名）
+    let pointText = ''
+    const hasModel = (items || []).some((i) => i.category === 'model')
+    if (hasModel) {
+      const mk = catalog.find((c) => /model-product-marketing-poster/.test(c.name || ''))
+      if (mk) pointText = `\n\n（本次素材包含模特图：优先用 load_skill 加载 ${mk.key}（${(mk.name || '').split('·')[0].trim()}）并遵循其构图纪律：模特完整存在、居中组合、脸部无遮挡、统一缩放比、背景无调色蒙层。注意：该 skill 所述的 run_poster.py/job.json 由系统侧执行——你的交付物必须是完整 HTML（<!DOCTYPE html> 开头，720×1440 画布，素材用 <img src=\"fileId\"> 绝对定位），不要输出 job.json 或其他格式。）`
+    }
     const r = await askWithSkills({
       system: HTML_SYSTEM,
-      text: visualOnly,
+      text: visualOnly + pointText,
       catalog,
       maxTokens: 32768,
       thinking: 'adaptive',
@@ -225,12 +232,40 @@ async function finalize(raw, items, fields, extra = {}, H = 1440, instruction = 
     if (!(fullW && fullH)) return tag
     return tag.replace(/(background(?:-image)?\s*:\s*)[^;\"']+/gi, '$1transparent')
   })
+  // 2.7) src 规范化：M3 可能写裸文件名（renderer 仅内联 /v2/files/ 与 http src → 裸名 404 裂图）
+  for (const it0 of items || []) {
+    html = html.replace(new RegExp(`src=(["'])${it0.fileId}\\1`, 'gi'), `src="${it0.url}"`)
+    html = html.replace(new RegExp(`src=(["'])\\.*/${it0.fileId}\\1`, 'gi'), `src="${it0.url}"`)
+  }
   // 2.8) 商品层级强制：M3 画的商品 img 统一 z-index:10（保证在底版之上）
   for (const pr of (items || []).filter((i) => i.category === 'product')) {
     html = html.replace(new RegExp(`(<img[^>]{0,400}${pr.fileId}[^>]{0,400}?)style="([^"]*)"(.*?)>`, 'gi'), (m, a, style, tail) => {
       const zRemoved = style.replace(/z-index\s*:\s*\d+\s*;?/gi, '')
       return `${a}style="${zRemoved};z-index:10"${tail}>`
     })
+  }
+  // 2.9) 模特图系统兜底：M3 未画 / display:none 的模特，系统按默认构图注入（右侧 62%H · bottom 对齐 · z-index:8，位于底版之上、商品之下）
+  for (const mr of (items || []).filter((i) => i.category === 'model')) {
+    const re = new RegExp(`<img[^>]*${mr.fileId}[^>]*>`, 'i')
+    const m0 = html.match(re)
+    const tag0 = m0 ? m0[0] : ''
+    // 可见 = 标签存在 + src 指向系统 url（裸文件名会 404）+ 有 absolute 定位样式（无定位的 img 无法参与版式）
+    const visible = tag0
+      && new RegExp(`src=["']/v2/files/l1/${mr.fileId}`, 'i').test(tag0)
+      && !/display\s*:\s*none/i.test(tag0)
+      && !/width\s*:\s*0([;\s]|px)?/i.test(tag0)
+      && !/height\s*:\s*0([;\s]|px)?/i.test(tag0)
+      && /position\s*:\s*absolute/i.test(tag0)
+    if (!visible) {
+      const why = !tag0 ? '缺失' : !new RegExp(`src=["']/v2/files/l1/${mr.fileId}`, 'i').test(tag0) ? 'src 无效(裸文件名)' : !/position\s*:\s*absolute/i.test(tag0) ? '无绝对定位' : '被隐藏'
+      // 原 M3 标签整体替换为系统兜底构图（右侧 62%H · bottom 对齐 · z-index:8）
+      if (tag0) html = html.replace(tag0, '')
+      const tag = `<img src="${mr.url}" style="position:absolute;right:-2%;bottom:0;height:62%;z-index:8;object-fit:contain">`
+      html = html.includes('<body')
+        ? html.replace(/<body([^>]*)>/i, (mm, attrs) => `<body${attrs}>${tag}`)
+        : `${tag}${html}`
+      logEvent({ biz: 'l2compose', traceId, stage: 'model-forced', status: 'warn', note: `M3 模特图${why}，系统已兜底注入（右侧 62%H）: ${mr.fileId}` })
+    }
   }
   // 3) 艺术字/水印系统定位（代码级：顶端 20% 居中 / 右上角），删除 M3 的乱放版本
   const adj = parseAdjust(instruction)

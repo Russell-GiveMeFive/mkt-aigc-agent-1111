@@ -16,6 +16,7 @@ const DEFAULT_INSTRUCTION = `生成完整海报（完整海报模式）。
 
 export default function L2() {
   const [lib, setLib] = useState({ items: [], page: 1, pages: 1, total: 0 })
+  const [delSel2, setDelSel2] = useState([])
   const [libPage, setLibPage] = useState(1)
   const [l1, setL1] = useState([])
   const [selMap, setSelMap] = useState({}) // category → fileId（每类单选）
@@ -24,7 +25,7 @@ export default function L2() {
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState(null)
   const [showHtml, setShowHtml] = useState(false)
-  const [mode, setMode] = useState('template')
+  const [mode, setMode] = useState('ai') // 样式合成已隐藏（保留 API 能力），UI 固定走 AI 合成
   const [pending, setPending] = useState([]) // 已提交未完成的合成任务（素材库 loading 占位）
   const [templates, setTemplates] = useState([])
   const selCount = Object.keys(selMap).length
@@ -46,13 +47,20 @@ export default function L2() {
   const compose = async () => {
     if (!selCount) return alert('先在下方每个类别中各选一个素材')
     const key = `c${Date.now()}`
-    const ids = Object.values(selMap)
+    let ids = Object.values(selMap)
     const nm = name
+    // 含模特图时样式合成（模板直出，无 LLM/无技能/版式无模特位）给不了模特效果 → 自动切 AI 合成
+    let useMode = mode
+    const hasModelPick = ids.some((fid) => (l1 || []).some((m) => m.fileId === fid && m.category === 'model'))
+    if (hasModelPick && mode === 'template') {
+      useMode = 'ai'
+      alert('已选择模特图：样式合成的固定版式不支持模特，本次自动切换为「AI 合成」（加载模特海报技能）。')
+    }
     setResult(null)
     setPending((p) => [...p, { key, name: nm || 'LLM 合成背景' }])
     setSelMap({})
     setName('')
-    api.composeBg({ itemIds: ids, instruction, name: nm || undefined, mode })
+    api.composeBg({ itemIds: ids, instruction, name: nm || undefined, mode: useMode })
       .then((r) => setResult(r))
       .catch((e) => alert(`合成失败: ${e.message}`))
       .finally(() => {
@@ -75,12 +83,7 @@ export default function L2() {
       <div style={{ flex: 1, minWidth: 0 }}>
       <div className="card">
         <h3>L2 · 商品海报合成 <span className="mono dim" style={{ fontSize: 10.5 }}>LEVEL 2 · 自然语言驱动合成</span></h3>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '10px 0 4px' }}>
-          <span className="dim" style={{ fontSize: 12 }}>合成模式</span>
-          {[['template', '样式合成（推荐·秒出·按官方版式）'], ['ai', 'AI 合成（大模型画视觉层）']].map(function (pair) {
-            return <button key={pair[0]} className="chip" style={{ opacity: mode === pair[0] ? 1 : 0.55 }} onClick={() => setMode(pair[0])}>{pair[1]}</button>
-          })}
-        </div>
+        {/* 样式合成（template 直出）暂时下线：固定走 AI 合成；mode=template 的 API 能力保留，需要时恢复此块并改回默认 mode */}
         <div className="dim" style={{ fontSize: 12.5 }}>
           按类别各选一个 L1 基础素材 + 一句自然语言描述 → LLM 生成 HTML（绝对定位精细控制）→ 浏览器截图 → 存入 L2 桶。标记「生产管线」的背景才能进入 L3 海报生成。
         </div>
@@ -89,7 +92,7 @@ export default function L2() {
 
       <div className="card">
         <h3>背景合成 <span className="mono dim" style={{ fontSize: 10.5 }}>COMPOSE</span></h3>
-        {CATEGORIES.map(([key, label]) => {
+        {CATEGORIES.filter(([key]) => key !== 'model').map(([key, label]) => {
           const list = l1.filter((a) => a.category === key)
           const picked = selMap[key]
           return (
@@ -159,7 +162,15 @@ export default function L2() {
       <div className="sectionGap" />
 
       <div className="card">
-        <h3>合成素材库 <span className="mono dim" style={{ fontSize: 10.5 }}>{lib.total}</span></h3>
+        <h3>合成素材库 <span className="mono dim" style={{ fontSize: 10.5 }}>{lib.total}</span>
+          {(delSel2 || []).length > 0 && (
+            <button className="btn sm" style={{ marginLeft: 10, borderColor: '#f472b6', color: '#f9a8d4' }} onClick={async () => {
+              if (!confirm(`删除 ${delSel2.length} 个合成素材？`)) return
+              for (const fid of delSel2) { try { await api.deleteL2(fid) } catch (e) { alert(`删除 ${fid} 失败：` + e.message) } }
+              setDelSel2([]); loadLib()
+            }}>删除选中 ({delSel2.length})</button>
+          )}
+        </h3>
         {items.length === 0 ? (
           <div className="emptyState">还没有合成背景</div>
         ) : (
@@ -173,13 +184,13 @@ export default function L2() {
                 </div>
               ))}
               {items.map((a) => (
-                <div key={a.fileId} className="pickCard poster" style={{ position: 'relative' }} onClick={() => openPreview(a)}>
+                <div key={a.fileId} className={`pickCard poster ${(delSel2 || []).includes(a.fileId) ? 'checkSel' : ''}`} style={{ position: 'relative' }} onClick={() => openPreview(a)}>
                   <img src={a.url} alt={a.name} />
                   <button className="pvBtn" title="预览大图" onClick={(e) => { e.stopPropagation(); openPreview(a) }}>⤢</button>
                   {a.pipeline && <span className="tag ok" style={{ position: 'absolute', top: 6, left: 6, fontSize: 9 }}>生产管线</span>}
+                  <span className={`cardCheck ${(delSel2 || []).includes(a.fileId) ? 'on' : ''}`} onClick={(e) => { e.stopPropagation(); setDelSel2((m) => m.includes(a.fileId) ? m.filter((x) => x !== a.fileId) : [...m, a.fileId]) }}>{(delSel2 || []).includes(a.fileId) ? '✓' : ''}</span>
                   <div className="nm">
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.name}</span>
-                    <button className="del" onClick={async (e) => { e.stopPropagation(); if (confirm(`删除 ${a.name}?`)) { try { await api.deleteL2(a.fileId) } catch (err) { alert('删除失败：' + err.message) } loadLib() } }}>×</button>
                   </div>
                   <div style={{ padding: '0 8px 8px' }}>
                     <button className={`btn sm ${a.pipeline ? '' : 'primary'}`} style={{ width: '100%' }} onClick={() => togglePipeline(a)}>
