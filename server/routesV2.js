@@ -220,6 +220,7 @@ export function buildV2Router() {
       instruction,
       htmlFileId: `${fileId}.html`,
       source: renderer,
+      productFileId: (items.find((i) => i.category === 'product') || {}).fileId || null, // 商品图关联：L4 视频生成时作为高清文字参考
       pipeline: false,
       createdAt: Date.now(),
     })
@@ -431,9 +432,9 @@ export function buildV2Router() {
   })
 
   r.post('/l4/generate', async (req, res) => {
-    const { l3FileId, prompt = '', modelVideoFileId, modelFileId, videoOpts } = req.body || {}
+    const { l3FileId, prompt = '', modelVideoFileId, modelFileId, productFileId, videoOpts } = req.body || {}
     if (!l3FileId) return res.status(400).json({ error: 'l3FileId 必填（L3 海报）' })
-    const task = createVideoJob({ l3FileId, prompt, modelVideoFileId, modelFileId, videoOpts })
+    const task = createVideoJob({ l3FileId, prompt, modelVideoFileId, modelFileId, productFileId, videoOpts })
     res.status(202).json({ jobId: task.id, status: task.status, poll: `/v2/l4/jobs/${task.id}` })
   })
   r.post('/l4/generate/batch', async (req, res) => {
@@ -556,7 +557,7 @@ export function buildV2Router() {
           }
           walk(path.join(tmp, 'out'), 0)
           if (!found) { items.push({ error: `${origName}: zip 内未找到 SKILL.md` }); continue }
-          const skillMd = fs.readFileSync(found, 'utf8')
+          let skillMd = fs.readFileSync(found, 'utf8')
           const pkgRoot = path.dirname(found)
           const dirName = path.basename(pkgRoot) === 'out' ? pkgName : path.basename(pkgRoot)
           // 完整包保留（去 __MACOSX）
@@ -564,9 +565,26 @@ export function buildV2Router() {
           fs.mkdirSync(path.dirname(pkgDir), { recursive: true })
           fs.cpSync(pkgRoot, pkgDir, { recursive: true })
           fs.rmSync(path.join(DATA_DIR, 'skills', 'packages', '__MACOSX'), { recursive: true, force: true })
+          // 默认行为：references/*.md 全部合并附到在册 md 末尾（load_skill 只回传单文件，M3 点不开链接，不合并则规范丢失）
+          const refs = []
+          const walkRefs = (dir) => {
+            for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+              if (e.name.startsWith('.') || e.name === '__MACOSX') continue
+              const full = path.join(dir, e.name)
+              if (e.isDirectory()) walkRefs(full)
+              else if (e.name.endsWith('.md') && !e.name.startsWith('SKILL') && full.includes(`${path.sep}references${path.sep}`)) refs.push(full)
+            }
+          }
+          walkRefs(pkgRoot)
+          refs.sort()
+          for (const r of refs) {
+            const rel = path.relative(pkgRoot, r)
+            skillMd += `\n\n---\n\n# 附 · ${rel}\n\n${fs.readFileSync(r, 'utf8').trim()}`
+          }
           const id = storage.newFileId('skill') + '.md'
           fs.writeFileSync(skillPath(id), skillMd)
-          items.push(addSkill({ id, name: dirName, filename: origName, size: skillMd.length, scope: fixFileName(req.body.scope), package: path.relative(DATA_DIR, pkgDir) }))
+          if (refs.length) logEvent && console.log(`[skills] ${dirName}: 已合并 ${refs.length} 份 references 进在册 md`)
+          items.push(addSkill({ id, name: dirName, filename: origName, size: skillMd.length, scope: fixFileName(req.body.scope), package: path.relative(DATA_DIR, pkgDir), refsMerged: refs.length }))
           fs.rmSync(tmp, { recursive: true, force: true })
         } catch (e) {
           items.push({ error: `${origName}: 解压失败（${e.message?.slice(0, 80)}；需要系统 unzip 命令）` })
@@ -640,6 +658,7 @@ function jobView(t) {
     videoOpts: t.v2?.videoOpts || null,
     modelFileId: t.v2?.modelFileId || null,
     modelVideoFileId: t.v2?.modelVideoFileId || null,
+    productFileId: t.v2?.productFileId || null,
     copy: t.results?.copy || null,
     name: t.meta?.name || null,
     error: t.error || null,
