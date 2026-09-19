@@ -1,0 +1,43 @@
+{
+  "packages": {
+    "pi-h3-live-model-prompt": {
+      "scope": [
+        "video"
+      ],
+      "enabled": false
+    },
+    "pi-model-product-marketing-poster": {
+      "scope": [
+        "html"
+      ],
+      "enabled": true
+    },
+    "poster-to-marketing-video": {
+      "scope": [
+        "video"
+      ],
+      "enabled": false
+    },
+    "layered-marketing-poster": {
+      "scope": [
+        "html"
+      ],
+      "enabled": true
+    },
+    "lively-model-product-video": {
+      "scope": [
+        "video"
+      ],
+      "enabled": false
+    }
+  },
+  "extra": {
+    "guizang-title-polish.md": {
+      "name": "归藏 · 标题精炼",
+      "scope": [
+        "copy"
+      ],
+      "enabled": false
+    }
+  }
+}

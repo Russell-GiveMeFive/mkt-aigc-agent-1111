@@ -58,7 +58,7 @@ export default function Skills() {
       <div className="card">
         <h3>技能 <span className="mono dim" style={{ fontSize: 10.5 }}>SKILLS · 注入 pi Agent</span></h3>
         <div className="dim" style={{ fontSize: 12.5 }}>
-          上传 Markdown 技能文档（.md / .txt），启用的技能按 scope 注入 pi Agent 上下文：<b>HTML 生成</b>（L2 背景合成引擎）、<b>文案生成</b>、<b>QC 裁判</b>或全部。点击技能名称可预览全文。
+          上传 Markdown 技能文档（.md / .txt）或完整技能包（.zip，自动解压取 SKILL.md，整包归档 data/skills/packages/），启用的技能按 scope 注入 pi Agent 上下文：<b>HTML 生成</b>（L2 背景合成引擎）、<b>文案生成</b>、<b>QC 裁判</b>或全部。点击技能名称可预览全文。
         </div>
       </div>
       <div className="sectionGap" />
@@ -71,7 +71,7 @@ export default function Skills() {
           <select className="input" style={{ width: 210 }} value={scope} onChange={(e) => setScope(e.target.value)}>
             {Object.entries(SCOPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
-          <input ref={fileRef} type="file" accept=".md,.txt" multiple hidden onChange={(e) => upload(e.target.files)} />
+          <input ref={fileRef} type="file" accept=".md,.txt,.zip" multiple hidden onChange={(e) => upload(e.target.files)} />
           <span style={{ flex: 1 }} />
           <span className="dim" style={{ fontSize: 12 }}>{items.length} 个技能 · {items.filter((x) => x.enabled).length} 个已启用</span>
           <button className="btn sm" disabled={busyAll || !items.length} onClick={() => setAll(true)}>{busyAll ? '…' : '☑ 全部启用'}</button>
