@@ -1,4 +1,6 @@
 node_modules
 web/dist
-data
+# 运行时数据不入库（settings.json 含 apiKey，绝不能提交）；技能库除外——clone 即得
+data/*
+!data/skills
 ref/frames

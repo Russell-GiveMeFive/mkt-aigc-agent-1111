@@ -1,0 +1,69 @@
+[
+  {
+    "id": "skill_mu0pl023be9483.md",
+    "name": "归藏 · 标题精炼",
+    "filename": "title-shortener.md",
+    "size": 6994,
+    "scope": [
+      "copy"
+    ],
+    "enabled": false,
+    "createdAt": 1789358050444
+  },
+  {
+    "id": "skill_lmp.md",
+    "name": "分层营销海报规范（layered-marketing-poster）",
+    "filename": "skill_lmp.md",
+    "size": 12729,
+    "scope": [
+      "html"
+    ],
+    "enabled": true,
+    "createdAt": 1789453222091
+  },
+  {
+    "id": "skill_p2mv.md",
+    "name": "poster-to-marketing-video · 静态海报转营销视频（flat-safe 动效规范 v4）",
+    "filename": "skill_p2mv.md",
+    "scope": [
+      "video"
+    ],
+    "enabled": false,
+    "createdAt": 1789623149606,
+    "size": 13291
+  },
+  {
+    "id": "skill_mpmp.md",
+    "name": "pi-model-product-marketing-poster v5.2 · 模特商品营销海报（最终响应=完整HTML / 确定性验证）",
+    "filename": "skill_mpmp.md",
+    "scope": [
+      "html"
+    ],
+    "enabled": true,
+    "createdAt": 1789649007738,
+    "size": 7100
+  },
+  {
+    "id": "skill_h3lm.md",
+    "name": "pi-h3-live-model-prompt v1.1.0 · H3 鲜活模特商品视频提示词（双图职责/动作时间轴/负面约束）",
+    "filename": "skill_h3lm.md",
+    "scope": [
+      "video"
+    ],
+    "enabled": false,
+    "createdAt": 1789662614510,
+    "size": 14155
+  },
+  {
+    "id": "skill_mu8g15xr56e3f3.md",
+    "name": "pi-h3-live-model-prompt",
+    "filename": "pi-h3-live-model-prompt-v1.1.0.zip",
+    "size": 3012,
+    "scope": [
+      "all"
+    ],
+    "enabled": true,
+    "createdAt": 1789825737810,
+    "package": "skills/packages/pi-h3-live-model-prompt"
+  }
+]

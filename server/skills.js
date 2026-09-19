@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { DATA_DIR } from './config.js'
 
 /**
@@ -8,6 +9,36 @@ import { DATA_DIR } from './config.js'
  */
 
 const DIR = path.join(DATA_DIR, 'skills')
+
+/** 首次启动种子安装：data/skills 尚无 meta.json 时，从仓库内置 skills/<目录>/SKILL.md + skills/seed.json 装配技能库（clone 即得） */
+function ensureSeed() {
+  if (fs.existsSync(path.join(DIR, 'meta.json'))) return
+  // 仓库根以本文件定位（DATA_DIR 可能是部署卷 /app/data，相对路径会找错）
+  const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
+  const repoSkills = path.join(REPO_ROOT, 'skills')
+  let seed = { packages: {}, extra: {} }
+  try { seed = JSON.parse(fs.readFileSync(path.join(repoSkills, 'seed.json'), 'utf8')) } catch {}
+  fs.mkdirSync(DIR, { recursive: true })
+  const meta = []
+  for (const [dirName, cfg] of Object.entries(seed.packages || {})) {
+    const src = path.join(repoSkills, dirName, 'SKILL.md')
+    if (!fs.existsSync(src)) continue
+    const id = `skill_${dirName}.md`
+    fs.copyFileSync(src, path.join(DIR, id))
+    meta.push({ id, name: dirName, filename: id, size: fs.statSync(src).size, scope: cfg.scope || ['all'], enabled: !!cfg.enabled, createdAt: Date.now() })
+  }
+  for (const [file, cfg] of Object.entries(seed.extra || {})) {
+    const src = path.join(repoSkills, 'extra', file)
+    if (!fs.existsSync(src)) continue
+    const id = `skill_${file.replace(/\.md$/i, '')}.md`
+    fs.copyFileSync(src, path.join(DIR, id))
+    meta.push({ id, name: cfg.name || file.replace(/\.md$/i, ''), filename: file, size: fs.statSync(src).size, scope: cfg.scope || ['all'], enabled: !!cfg.enabled, createdAt: Date.now() })
+  }
+  saveMeta(meta)
+  console.log(`[skills] 首次启动：已从仓库种子安装 ${meta.length} 个技能（data/skills）`)
+}
+try { ensureSeed() } catch {}
+
 
 function metaFile() {
   return path.join(DIR, 'meta.json')
@@ -46,10 +77,10 @@ function scopeMatches(entry, scope) {
   return s.includes('all') || s.includes(scope)
 }
 
-export function addSkill({ id, name, filename, size, scope }) {
+export function addSkill({ id, name, filename, size, scope, package: pkgDir }) {
   const list = loadMeta()
   if (!list.some((x) => x.id === id)) {
-    list.push({ id, name, filename, size, scope: normalizeScope(scope), enabled: true, createdAt: Date.now() })
+    list.push({ id, name, filename, size, scope: normalizeScope(scope), enabled: true, createdAt: Date.now(), ...(pkgDir ? { package: pkgDir } : {}) })
     saveMeta(list)
   }
   return list.find((x) => x.id === id)

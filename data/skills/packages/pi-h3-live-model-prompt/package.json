@@ -1,0 +1,17 @@
+{
+  "name": "pi-h3-live-model-prompt",
+  "version": "1.1.0",
+  "private": true,
+  "description": "Pi/MiniMax-M3 multimodal skill that turns a model reference and product poster into a production-ready MiniMax H3 video prompt.",
+  "keywords": ["pi-package", "minimax-m3", "minimax-h3", "video-prompt", "marketing"],
+  "type": "module",
+  "pi": {
+    "extensions": ["./extensions/h3-prompt-tool.ts"],
+    "skills": ["./SKILL.md"],
+    "prompts": ["./prompts/h3-live-model-prompt.md"]
+  },
+  "peerDependencies": {
+    "@mariozechner/pi-ai": "*",
+    "@mariozechner/pi-coding-agent": "*"
+  }
+}

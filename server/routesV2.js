@@ -534,8 +534,47 @@ export function buildV2Router() {
     const items = []
     for (const f of files) {
       const origName = fixFileName(f.originalname)
+      // .zip 技能包：解压取 SKILL.md 全文入库，完整目录保留到 data/skills/packages/<name>/
+      if (/\.zip$/i.test(origName)) {
+        try {
+          const os = await import('node:child_process')
+          const pkgName = origName.replace(/\.zip$/i, '')
+          const tmp = path.join(os.tmpdir?.() || '/tmp', `skillzip_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`)
+          fs.mkdirSync(tmp, { recursive: true })
+          fs.writeFileSync(path.join(tmp, 'in.zip'), f.buffer)
+          os.execFileSync('unzip', ['-oq', 'in.zip', '-d', 'out'], { cwd: tmp })
+          // 定位 SKILL.md（zip 根或单层包目录内，取最浅者）
+          let found = null
+          const walk = (dir, depth) => {
+            if (found || depth > 3) return
+            for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+              if (e.name.startsWith('__MACOSX') || e.name.startsWith('.')) continue
+              const full = path.join(dir, e.name)
+              if (e.isDirectory()) walk(full, depth + 1)
+              else if (e.name === 'SKILL.md') found = found || full
+            }
+          }
+          walk(path.join(tmp, 'out'), 0)
+          if (!found) { items.push({ error: `${origName}: zip 内未找到 SKILL.md` }); continue }
+          const skillMd = fs.readFileSync(found, 'utf8')
+          const pkgRoot = path.dirname(found)
+          const dirName = path.basename(pkgRoot) === 'out' ? pkgName : path.basename(pkgRoot)
+          // 完整包保留（去 __MACOSX）
+          const pkgDir = path.join(DATA_DIR, 'skills', 'packages', dirName)
+          fs.mkdirSync(path.dirname(pkgDir), { recursive: true })
+          fs.cpSync(pkgRoot, pkgDir, { recursive: true })
+          fs.rmSync(path.join(DATA_DIR, 'skills', 'packages', '__MACOSX'), { recursive: true, force: true })
+          const id = storage.newFileId('skill') + '.md'
+          fs.writeFileSync(skillPath(id), skillMd)
+          items.push(addSkill({ id, name: dirName, filename: origName, size: skillMd.length, scope: fixFileName(req.body.scope), package: path.relative(DATA_DIR, pkgDir) }))
+          fs.rmSync(tmp, { recursive: true, force: true })
+        } catch (e) {
+          items.push({ error: `${origName}: 解压失败（${e.message?.slice(0, 80)}；需要系统 unzip 命令）` })
+        }
+        continue
+      }
       if (!/\.(md|txt)$/i.test(origName)) {
-        items.push({ error: `${origName} 仅支持 .md / .txt` })
+        items.push({ error: `${origName} 仅支持 .md / .txt / .zip 技能包` })
         continue
       }
       const id = storage.newFileId('skill') + '.md'
