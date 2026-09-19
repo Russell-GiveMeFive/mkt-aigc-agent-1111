@@ -78,12 +78,12 @@
 <div class="band">
   <div class="cap"><b>① GUI · Vite + React</b><span>WEB :8788 · 六页签</span></div>
   <div class="row">
-    <div class="card accent"><b>基础素材</b><div class="d">L1 七类分组 · 批量上传 · 分页查看</div></div>
-    <div class="card accent"><b>平台合成素材</b><div class="d">自然语言合成 · 分类单选 · 管线标记</div></div>
-    <div class="card accent"><b>商家最终海报</b><div class="d">管线生成 · 再加工 · 海报库分页</div></div>
-    <div class="card accent"><b>视频合成</b><div class="d">海报批量 → 5s 视频 · 分页库</div></div>
-    <div class="card"><b>设置</b><div class="d">Key 安全回显 · 四桶配置 · OSS 拉取</div></div>
-    <div class="card"><b>技能</b><div class="d">上传 md → 注入 QC 裁判</div></div>
+    <div class="card accent"><b>基础素材 L1</b><div class="d">七类分组 · 批量上传 · 勾选批量删除 · 大图预览</div></div>
+    <div class="card accent"><b>商品海报合成 L2</b><div class="d">AI 合成（样式直出隐藏）· 管线标记 · 库勾选删</div></div>
+    <div class="card gold"><b>视频合成 L4</b><div class="d">生产管线海报直通 · 绑定模特(可选) · 有/无模特双 tab 提示词 · 视频库/任务</div></div>
+    <div class="card"><b>运行日志</b><div class="d">全 biz 事件流 · taskId 检索 · 5s 自动刷新</div></div>
+    <div class="card"><b>设置</b><div class="d">Key 安全回显 · 四桶配置 · 并发(0=不限) · OSS 拉取</div></div>
+    <div class="card"><b>技能</b><div class="d">上传 md · scope · 启/停（目录实时跟随，停用即不进目录）</div></div>
   </div>
 </div>
 <div class="arrow">▼<small>REST（JSON / multipart，X-API-Key 可选鉴权 · 列表统一分页 page/pageSize → {items,total,page,pages,hasMore}）</small></div>
@@ -93,7 +93,7 @@
   <div class="cap"><b>② API 层 · Express</b><span class="mono">:8788</span></div>
   <div class="row">
     <div class="card gold"><b>/v2 · 三层模型开放接口</b>
-      <div class="d">L1 上传/分页列表/删除 · L2 compose-bg(+batch)/pipeline · L3 generate(+batch)/rework(+batch)/jobs/assets · L4 generate(+batch)/jobs/assets · settings(持久化) · buckets/:test/:sync · skills · <span class="mono">GET /v2/files/:bucket/:fileId</span> 桶代理</div>
+      <div class="d">L1 上传/分页列表/删除 · L2 compose-bg(+batch)/pipeline · L3 generate(+batch)/rework(+batch)/jobs/assets · L4 generate(+batch · modelFileId 绑定模特)/jobs/assets(+finalPrompt) · settings(持久化) · buckets/:test/:sync · skills · <span class="mono">GET /v2/files/:bucket/:fileId</span> 桶代理</div>
     </div>
     <div class="card ok2"><b>鉴权与错误</b><div class="d">X-API-Key 逐请求热生效 · async 异常统一转 JSON 500（不挂死连接）</div></div>
     <div class="card"><b>/v1 · 兼容接口</b><div class="d">旧单品流水线 + 批量矩阵 + 异步 job/webhook</div></div>
@@ -111,15 +111,15 @@
     </div>
     <div class="link mono">→</div>
     <div class="card accent"><b><span class="lvl">L2</span>平台合成素材</b>
-      <div class="d">选 L1 素材 + 自然语言 → <b style="display:inline">M3 生成 720×1440 HTML</b>（绝对定位）→ inlineImages → <b style="display:inline">无头 Chrome 截图</b> → PNG 落 l2 桶（+HTML 存档）<br>生产管线标记（批量）决定能否进入 L3</div>
+      <div class="d">选 L1 素材 + 自然语言 → <b style="display:inline">M3 生成 720×1440 HTML</b>（绝对定位）→ inlineImages → <b style="display:inline">无头 Chrome 截图</b> → PNG 落 l2 桶（+HTML 存档）<br>生产管线标记（批量）→ <b style="display:inline">直接进入 L4 视频合成</b>（l2bg_ 直通，服务端双桶兼容）</div>
     </div>
     <div class="link mono">→</div>
-    <div class="card accent"><b><span class="lvl">L3</span>商家最终海报</b>
-      <div class="d">① 管线生成：管线背景 + 商品 + 模特 + 文案槽位 → 严格版式合成 → <b style="display:inline">QC 裁判</b> → 修复 ≤2 轮 → l3 桶<br>② 再加工：换商品图重新合成</div>
+    <div class="card"><b><span class="lvl">L3</span>商家最终海报 <span class="mono" style="font-size:9px;color:#8b8199;">UI 已下线 · API/任务保留</span></b>
+      <div class="d">管线生成（QC 裁判 + 修复 ≤2 轮）/ 直通 / 再加工——侧边导航已移除，接口与历史数据完整保留，可随时恢复</div>
     </div>
     <div class="link mono">→</div>
     <div class="card gold"><b><span class="lvl">L4</span>视频合成</b>
-      <div class="d">L3 海报 + prompt → H3 5s 竖版<br>I2VA 首帧 / R2VA 参考视频（互斥）<br>task 轮询 → mp4 落 l4 桶</div>
+      <div class="d">生产管线海报 + 提示词（有/无模特双 tab）<br><b style="display:inline">motion-agent</b>：M3 多模态（有模特=模特参考图+海报双图；提示词规范内置 system，<b style="display:inline">零技能挂载</b>）→ JSON {videoPrompt, motionPlan}<br>H3 三模式：<span class="mono">model_ref</span>（模特图×2参考）/ <span class="mono">reference</span>（模特视频）/ <span class="mono">first_frame</span><br>8min 轮询 · <b style="display:inline">重启自动续轮询</b>（有 taskId 不重提交）· finalPrompt 记录实际提交值 → mp4 落 l4 桶</div>
     </div>
   </div>
   <div class="endpoints">
@@ -151,7 +151,15 @@
     <div class="card accent">
       <b>QC Judge</b>
       <div class="d">系统检查清单 + 版式 zones JSON + 海报图 → JSON verdict {pass, score, defects[], repairPlan}；MOCK=本地启发式（分辨率/对比度/商品区 σ/CTA 亮度）</div>
-      <div class="t" style="margin-top:6px;">技能注入：技能页 md → enabledSkillsText() → system prompt</div>
+      <div class="t" style="margin-top:6px;">技能注入：技能页 md → enabledSkillsText() → system prompt（文案链路）</div>
+    </div>
+    <div class="card accent">
+      <b>技能机制 · askWithSkills</b>
+      <div class="d">skillCatalog(scope) 按 scope+<b style="display:inline">enabled</b> 过滤 → <b style="display:inline">目录=启用技能</b>；目录空则不注册 load_skill（零调用）<br>load_skill FC：4 轮上限 · 首轮直出 nudge 补拉 · 编号稳定 · 多模态 images（pi-ai ImageContent 裸 base64）· skillsLoaded 只记成功加载</div>
+    </div>
+    <div class="card">
+      <b>PiTracePanel · 运行日志</b>
+      <div class="d">每次 LLM 调用一条（traceId + 响应 id + skillsLoaded）· taskId 检索 · biz 过滤 · 5s 自动刷新 · JSONL 落盘 data/logs/</div>
     </div>
     <div class="endpoints">调用协议：<em>pi-ai anthropic 协议 → {base}/anthropic/v1/messages；失败自动回退直连 chatVisionText</em></div>
   </div>
@@ -161,7 +169,7 @@
       <div class="d mono" style="font-size:10.5px;">POST /anthropic/v1/messages<br>system + messages + thinking{adaptive|disabled}<br>文案 JSON / HTML 生成 / QC 视觉</div>
     </div>
     <div class="card gold" style="margin-top:10px;"><b class="mono">image-01 / H3 v2</b>
-      <div class="d mono" style="font-size:10.5px;">POST /v1/image_generation（AIGC 背景备用）<br>POST /v2/video_generation → task_id<br>GET /v2/query/video_generation/{id} → content.url</div>
+      <div class="d mono" style="font-size:10.5px;">POST /v1/image_generation（AIGC 背景备用）<br>POST /v2/video_generation → task_id（first_frame / reference_image×2 / reference_video 三种 content）<br>GET /v2/query/video_generation/{id} → content.url（8min 轮询，重启续查）</div>
     </div>
   </div>
 </div>
@@ -169,7 +177,7 @@
 <div class="foot mono">
   <span>MOCK 模式：未配置 Key 全链路本地模拟，协议与 LIVE 一致</span>
   <span>渲染引擎：playwright-core · channel chrome · deviceScaleFactor 2</span>
-  <span>测试：node --test · 39 用例（MiniMax 协议单测 + v2 全链路集成，DATA_DIR 隔离）</span>
+  <span>测试：node --test · 45 用例（MiniMax 协议单测 + v2 全链路集成 · DATA_DIR 隔离）</span>
   <span>部署：node:22-slim + ffmpeg + chromium · 数据卷 /app/data</span>
 </div>
 
