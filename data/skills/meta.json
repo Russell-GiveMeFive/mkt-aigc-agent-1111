@@ -52,18 +52,17 @@
     ],
     "enabled": false,
     "createdAt": 1789662614510,
-    "size": 14155
+    "size": 14542
   },
   {
-    "id": "skill_mu8g15xr56e3f3.md",
-    "name": "pi-h3-live-model-prompt",
-    "filename": "pi-h3-live-model-prompt-v1.1.0.zip",
-    "size": 3012,
+    "id": "skill_lmpv.md",
+    "name": "lively-model-product-video",
+    "filename": "skill_lmpv.md",
+    "size": 14191,
     "scope": [
-      "all"
+      "video"
     ],
-    "enabled": true,
-    "createdAt": 1789825737810,
-    "package": "skills/packages/pi-h3-live-model-prompt"
+    "enabled": false,
+    "createdAt": 1789623149606
   }
 ]

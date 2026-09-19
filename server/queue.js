@@ -16,6 +16,7 @@ import { composeBackground } from './bgcompose.js'
 import { getCopy } from './copies.js'
 import { getAsset, assetFilePath, assetPath } from './assets.js'
 import * as storage from './storage.js'
+import { getIndex } from './bucketIndex.js'
 import { upsertIndex } from './bucketIndex.js'
 
 /**
@@ -136,21 +137,57 @@ const MOTION_DIRECTOR_SYSTEM = `你是营销视频运动导演。根据视频技
 - 运动必须克制（restrained），避免重影/双边缘；末帧必须是完整构图并定格。
 - 输出 JSON：{"videoPrompt": "一句中文运动描述（≤80字，给 H3 的 text 提示词）", "motionPlan": "动效要点，≤60字"}`
 
-const MOTION_DIRECTOR_MODEL_SYSTEM = `你是营销视频提示词导演（有模特模式）。会话已附加两张图：
+const MOTION_DIRECTOR_MODEL_SYSTEM = `你是营销视频提示词导演（有模特模式）。会话已附加两张或三张图：
 - 图1 = 模特参考图：人物身份、五官、发型、服装、身体比例、初始姿势与合理动作范围的唯一权威。
 - 图2 = 商品营销海报：商品、包装文字、标题、Logo、背景、装饰、色彩、构图与画幅的权威。
+- 图3 = 商品高清原图（若已附加）：商品包装/标签上所有文字（品名、卖点、成分、字标）的唯一权威，图2 与生成画面中的同类文字都必须与图3 逐字一致。
 
 先通过 load_skill 加载目录中与「有模特商品视频提示词」最相关的技能（若有指定编号则必须加载指定技能）并严格遵循其输出契约，然后产出可直接提交 MiniMax H3 multi-reference 图生视频的创建提示词。
 
 硬性要求：
 - 人物从第一帧起自然整合进海报场景（不得中途出现），完成一次连续、鲜活、符合原姿势的带货表演：看向观众、表情变化、身体或重心参与、手臂展示；商品向镜头递近形成 hero close-up。
 - 背景烟雾/光影/花瓣/粒子分层定向流动；相框、建筑、桌面、Logo 等固定结构不得缩放或移动。
+- 海报的空白/渐变区域（尤其画幅四角与边缘）必须保持空白干净：不得新增海报中不存在的任何元素（圆圈、圆环、圆月、光斑、图章、边框、水印、Logo、文字、图案、新装饰物），流动只作用于原图已有元素。
 - 标题可短促错峰上浮、数字脉冲、高光扫过；不得改字、换字体、变形或持续抖动。
-- 人物脸部、服装、四肢与比例全程稳定；负面约束必须写入：油腻皮肤、塑料感、AI 脸、五官漂移、额外手指、穿模、商品瞬移、整图缩放、镜头推拉。
+- 人物脸部、服装、四肢与比例全程稳定；商品标签与包装文字在任何运动阶段保持清晰锐利、不得出现模糊涂抹/乱码/字符漂移/增减笔画（写明：包装文字与商品参考图逐字一致）。
+- 负面约束必须写入：油腻皮肤、塑料感、AI 脸、五官漂移、额外手指、穿模、商品瞬移、整图缩放、镜头推拉、标签文字模糊、文字乱码、文字变形。
 
 只输出 JSON：{"videoPrompt": "完整 H3 multi-reference 提示词（中文，含 5 秒时间线、动作原型、人物表演、商品 hero moment、背景流动、标题动效、参考图职责、负面约束）", "motionPlan": "要点，≤80字"}`
 
 const FALLBACK_VIDEOPROMPT = '画面中心的商品向镜头方向缓缓递出靠近并轻微旋转，模特与背景轻微视差跟随，顶部门头带、节日行与大字标题保持完全静止，整体氛围光缓慢流动'
+
+/** 商品高清参考图（L4 文字保真）：读 L1 商品图 → EXIF 修正 → 长边限 2048（原图超限则等比缩，保证标签文字清晰且 API 体积可控） */
+async function productRefDataUrl(task) {
+  let pid = task.v2?.productFileId
+  // 兜底：前端未传（旧 bundle/旧客户端）→ 自动从海报 meta 补（L2 合成已记录 productFileId）
+  if (!pid && String(task.v2?.l3FileId || '').startsWith('l2bg_')) {
+    const l2meta = getIndex('l2', task.v2.l3FileId)
+    if (l2meta?.productFileId) {
+      pid = l2meta.productFileId
+      task.v2.productFileId = pid
+      logEvent({ biz: 'l4video', taskId: task.id, traceId: task.id, stage: 'product-ref', status: 'ok', note: `任务未带商品图，已从海报 meta 自动补齐: ${pid}` })
+    }
+  }
+  if (!pid) return ''
+  try {
+    let buf = await storage.get('l1', pid)
+    if (!buf) { logEvent({ biz: 'l4video', taskId: task.id, traceId: task.id, stage: 'product-ref', status: 'warn', note: `商品参考图读取失败: ${pid}` }); return '' }
+    // 关键预处理：① trim 自动裁掉四周纯色/近色背景（黑底/白底商品图 75% 像素是浪费的）
+    //             ② 无放大限制 resize 到长边 2048（H3 规格内最大化）→ 裁剪+放大后标签文字有效像素密度提升数倍
+    let trimmed = false
+    try {
+      const t = await sharp(buf).rotate().trim({ threshold: 30 }).toBuffer()
+      const meta = await sharp(t).metadata()
+      if (meta.width > 50 && meta.height > 50) { buf = t; trimmed = true }
+    } catch { /* trim 失败（背景杂色）→ 跳过裁剪，直接放大 */ }
+    buf = await sharp(buf).rotate().resize({ width: 2048, height: 2048, fit: 'inside', withoutEnlargement: false }).png().toBuffer()
+    logEvent({ biz: 'l4video', taskId: task.id, traceId: task.id, stage: 'product-ref', status: 'ok', note: `商品参考图已${trimmed ? '裁边+' : ''}放大至 2048（${Math.round(buf.length / 1024)}KB）: ${pid}` })
+    return `data:image/png;base64,${buf.toString('base64')}`
+  } catch (e) {
+    logEvent({ biz: 'l4video', taskId: task.id, traceId: task.id, stage: 'product-ref', status: 'warn', note: `商品参考图预处理失败: ${String(e.message).slice(0, 100)}` })
+    return ''
+  }
+}
 
 /** L2 背景来源解析：bucket(v2 fileId) / library(旧注册表) / l1compose / aigc */
 async function stageBackground(task, { bgSource, styleId, retry = 0, repairAction }) {
@@ -294,6 +331,8 @@ async function stageVideo(task, { copy }) {
       if (mb) modelImgB64 = mb.toString('base64')
       else logEvent({ biz: 'l4video', taskId: task.id, traceId: task.id, stage: 'motion-agent', status: 'warn', note: `绑定的模特图读取失败: ${modelFileId}（回退无模特流程）` })
     }
+    const productDataUrl = await productRefDataUrl(task) // 商品高清原图（标签文字保真参考，可选）
+    const productImgB64 = productDataUrl ? productDataUrl.split(',')[1] : ''
     try {
       // 技能目录 = 启用中的 video 相关技能（skillCatalog 过滤 enabled；GUI 停用即时生效，全部停用则零调用）
       const cat = skillCatalog('video')
@@ -303,10 +342,10 @@ async function stageVideo(task, { copy }) {
         const mr = await askWithSkills({
           system: isModelImage ? MOTION_DIRECTOR_MODEL_SYSTEM : MOTION_DIRECTOR_SYSTEM,
           text: isModelImage
-            ? `已附加两张图：图1=模特参考图（${modelFileId}），图2=商品营销海报。用户补充描述：${userMotion || '（未填，按技能默认表演语言）'}。比例 ${vParams.aspectRatio}，分辨率 ${vParams.resolution}，时长 ${vParams.duration}s。${mk ? `请优先 load_skill 加载 ${mk.key}（${(mk.name || '').split('·')[0].trim()}）并严格遵循其输出契约。` : ''}请输出 JSON。`
+            ? `已附加${productImgB64 ? '三' : '两'}张图：图1=模特参考图（${modelFileId}），图2=商品营销海报${productImgB64 ? `，图3=商品高清原图（标签/包装文字以此图为唯一权威）` : ''}。用户补充描述：${userMotion || '（未填，按技能默认表演语言）'}。比例 ${vParams.aspectRatio}，分辨率 ${vParams.resolution}，时长 ${vParams.duration}s。${mk ? `请优先 load_skill 加载 ${mk.key}（${(mk.name || '').split('·')[0].trim()}）并严格遵循其输出契约。` : ''}请输出 JSON。`
             : `竖版营销海报（画幅即视频画幅）。用户运动描述：${userMotion || '（未填，按技能默认动效语言）'}。比例 ${vParams.aspectRatio}，分辨率 ${vParams.resolution}，时长 ${vParams.duration}s。请输出 JSON。`,
           catalog: cat,
-          images: isModelImage ? [`data:image/png;base64,${modelImgB64}`, `data:image/png;base64,${b64}`] : [],
+          images: isModelImage ? [`data:image/png;base64,${modelImgB64}`, `data:image/png;base64,${b64}`, ...(productImgB64 ? [`data:image/png;base64,${productImgB64}`] : [])] : [],
           maxTokens: isModelImage ? 4096 : 2048,
           thinking: 'adaptive',
           log: { biz: 'l4video', taskId: task.id, traceId: task.id, stage: 'motion-agent' },
@@ -332,6 +371,7 @@ async function stageVideo(task, { copy }) {
         prompt: userMotion || copy.videoPrompt || FALLBACK_VIDEOPROMPT, // motion-agent skill 产出优先，输入框原文仅回退
         posterUrl: `data:image/png;base64,${b64}`,
         modelImageUrl: `data:image/png;base64,${modelImgB64}`,
+        productUrl: productDataUrl || undefined, // 商品高清原图（第 3 参考图，文字保真）
         ...vParams,
       })
     } else if (isModelVideo) {
@@ -352,7 +392,7 @@ async function stageVideo(task, { copy }) {
         ...vParams,
       })
     }
-    logEvent({ biz: 'l4video', taskId: task.id, traceId: task.id, stage: 'h3-submit', status: 'ok', note: `H3 taskId=${taskId} ratio=${vParams.aspectRatio} res=${vParams.resolution} dur=${vParams.duration}s mode=${modelImgB64 ? 'model_ref' : isModelVideo ? 'reference' : 'first_frame'}` })
+    logEvent({ biz: 'l4video', taskId: task.id, traceId: task.id, stage: 'h3-submit', status: 'ok', note: `H3 taskId=${taskId} ratio=${vParams.aspectRatio} res=${vParams.resolution} dur=${vParams.duration}s mode=${modelImgB64 ? 'model_ref' : isModelVideo ? 'reference' : 'first_frame'}${productDataUrl ? ' +productRef' : ''}` })
     task.results.videoTaskId = taskId
     task.results.finalPrompt = userMotion || copy.videoPrompt || FALLBACK_VIDEOPROMPT
     await pollH3UntilDone(task, taskId, videoFile)
@@ -657,10 +697,10 @@ export function createJobBatch(items) {
 }
 
 /** L4 视频任务：基于已有 L3 海报直接生成视频（不重跑管线） */
-export function createVideoJob({ l3FileId, prompt, modelVideoFileId, modelFileId, videoOpts }) {
+export function createVideoJob({ l3FileId, prompt, modelVideoFileId, modelFileId, productFileId, videoOpts }) {
   const task = newTask({
     kind: 'video',
-    v2: { l3FileId, modelVideoFileId, modelFileId, videoOpts: videoOpts || {} },
+    v2: { l3FileId, modelVideoFileId, modelFileId, productFileId, videoOpts: videoOpts || {} },
     options: { generateVideo: true, copySlots: { videoPrompt: prompt } },
     results: {},
     stages: [{ key: 'video', status: 'pending' }],

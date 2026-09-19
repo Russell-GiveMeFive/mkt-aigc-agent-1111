@@ -4,3 +4,4 @@ web/dist
 data/*
 !data/skills
 ref/frames
+.DS_Store

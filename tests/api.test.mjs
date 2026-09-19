@@ -463,6 +463,17 @@ test('L4 绑定模特图：modelFileId 透传进任务（v2 记录）', async ()
   assert.equal(job.modelFileId, mid)
 })
 
+test('L4 商品参考图：productFileId 透传进任务（文字保真第 3 参考图）', async () => {
+  const upP = await upload('product', 'data/assets/l1-plate/l1-plate-2.png', '测试商品')
+  assert.equal(upP.status, 201)
+  const pid = upP.data.items[0].fileId
+  const { status, data } = await j('POST', '/v2/l4/generate', { l3FileId: shared.l3, prompt: '商品参考图测试', productFileId: pid })
+  assert.equal(status, 202)
+  const job = await pollJob(data.poll)
+  assert.equal(job.status, 'done')
+  assert.equal(job.productFileId, pid)
+})
+
 test('L4 l2 pipeline 直通：l2bg_ 前缀海报可生成视频（双桶兼容）', async () => {
   const { data: pl } = await j('GET', '/v2/l2/assets?pipeline=true&pageSize=1')
   assert.ok(pl.items[0], '需要一张生产管线标记的 L2 海报')
