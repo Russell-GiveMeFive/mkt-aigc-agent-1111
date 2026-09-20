@@ -3,6 +3,7 @@ import { newTrace } from './agentlog.js'
 import { HTML_SYSTEM } from './agent/prompts.js'
 import { enabledSkillsText, enabledSkillIds, skillCatalog } from './skills.js'
 import { effective, DATA_DIR } from './config.js'
+import * as storage from './storage.js'
 import { logEvent } from './agentlog.js'
 import path from 'node:path'
 import fs from 'node:fs'
@@ -156,7 +157,7 @@ export async function composeHtml({ items, instruction, log = {} }) {
   const plate0 = (items || []).find((i) => i.category === 'plate')
   if (plate0) {
     try {
-      const meta = await sharp(path.join(DATA_DIR, 'buckets', 'l1', plate0.fileId)).metadata()
+      const meta = await sharp(await readAsset(plate0.fileId)).metadata()
       if (meta?.width && meta?.height) canvasH = Math.max(600, Math.min(2600, Math.round(720 * meta.height / meta.width)))
     } catch {}
   }
@@ -402,13 +403,23 @@ export function parseAdjust(instruction = '') {
 }
 
 // ── 分层素材可见边界探测（封装自 layered-marketing-poster skill 的 probe_assets）
+
+
+/** driver 感知读素材：素材可能在 OSS 也可能在本地磁盘——统一走 storage.get，本地文件兜底（修复 OSS 素材合成时 M3 盲写/布局退化） */
+async function readAsset(fileId) {
+  try { const b = await storage.get('l1', fileId); if (b) return b } catch {}
+  const p = path.join(DATA_DIR, 'buckets', 'l1', fileId)
+  try { if (fs.existsSync(p)) return fs.readFileSync(p) } catch {}
+  return null
+}
+
 const probeCache = new Map()
 async function probeVisibleBox(fileId) {
   if (probeCache.has(fileId)) return probeCache.get(fileId)
   let box = null
   try {
-    const fp = path.join(DATA_DIR, 'buckets', 'l1', fileId)
-    const { data, info } = await sharp(fp).raw().toBuffer({ resolveWithObject: true })
+    const buf = await readAsset(fileId)
+    const { data, info } = await sharp(buf).raw().toBuffer({ resolveWithObject: true })
     if (info.channels === 4) {
       let l = info.width, t = info.height, r = 0, b = 0, found = false
       for (let y = 0; y < info.height; y++) {
@@ -430,8 +441,9 @@ async function probeVisibleBox(fileId) {
 
 // 裁掉透明边距的派生文件（不改原件），用于精确中心锚定
 async function trimmedArtUrl(fileId) {
-  const src = path.join(DATA_DIR, 'buckets', 'l1', fileId)
-  const out = src.replace(/(\.png|\.jpg|\.jpeg|\.webp)$/i, '') + '.trim.png'
+  const src = await readAsset(fileId)
+  const outName = fileId.replace(/(\.png|\.jpg|\.jpeg|\.webp)$/i, '') + '.trim.png'
+  const out = path.join(DATA_DIR, 'buckets', 'l1', outName)
   try {
     if (!fs.existsSync(out)) {
       const box = await probeVisibleBox(fileId)
@@ -441,6 +453,7 @@ async function trimmedArtUrl(fileId) {
         await sharp(src).png().toFile(out)
       }
     }
+    try { const cur = await storage.get('l1', outName).catch(() => null); if (!cur) await storage.put('l1', outName, fs.readFileSync(out)) } catch {}
     return `/v2/files/l1/${path.basename(out)}`
   } catch {
     return `/v2/files/l1/${fileId}`
@@ -457,7 +470,7 @@ async function placeArtLayers(items, H, adj, zIdx = 20) {
     // 一律按 alpha 可见内容中心锚定（裁掉透明边距）：可见中心默认 y=20%H
     const url = await trimmedArtUrl(a.fileId)
     let tw = 0, th = 0
-    try { const m = await sharp(path.join(DATA_DIR, 'buckets', 'l1', path.basename(url))).metadata(); tw = m.width; th = m.height } catch {}
+    try { const m = await sharp(await readAsset(path.basename(url))).metadata(); tw = m.width; th = m.height } catch {}
     if (!tw || !th) { tags.push(`<img src="${a.url}" style="position:absolute;top:${Math.round(H * 0.2)}px;left:50%;transform:translateX(-50%);max-width:70%;z-index:${zIdx}">`); continue }
     const wPct = adj.strict ? 70 * adj.artScale : Math.min(92, 70 * adj.artScale)
     const renderW = wPct / 100 * 720
@@ -486,7 +499,7 @@ export async function composeTemplateHtml({ items, instruction, log = {} }) {
   if (plate0) {
     plateUrl = plate0.url
     try {
-      const meta = await sharp(path.join(DATA_DIR, 'buckets', 'l1', plate0.fileId)).metadata()
+      const meta = await sharp(await readAsset(plate0.fileId)).metadata()
       if (meta?.width && meta?.height) {
         plateW = meta.width
         H = Math.max(600, Math.min(2600, Math.round(720 * meta.height / meta.width)))

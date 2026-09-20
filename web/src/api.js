@@ -37,6 +37,7 @@ export const api = {
   logs: (q = {}) => jfetch(`/v2/logs?${qs(q)}`), // qs 会跳过 undefined/空值（URLSearchParams 会把 undefined 序列化成 'undefined' 导致后端过滤成 0 条）
   revealSettings: () => jfetch('/v2/settings?reveal=1'),
   saveSettings: (patch) => jfetch('/v2/settings', { method: 'PUT', body: JSON.stringify(patch) }),
+  migrateBucketLocal: (bucket) => jfetch(`/v2/buckets/${bucket}/migrate-local`, { method: 'POST' }),
   testBucket: (b) => jfetch(`/v2/buckets/${b}/test`, { method: 'POST' }),
   syncBucket: (b) => jfetch(`/v2/buckets/${b}/sync`, { method: 'POST' }),
   stats: () => jfetch('/api/stats'),

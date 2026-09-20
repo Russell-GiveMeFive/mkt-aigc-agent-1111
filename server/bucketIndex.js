@@ -28,6 +28,7 @@ export async function syncBucketIndex(bucket) {
   let added = 0
   for (const o of objects) {
     if (String(o.fileId).endsWith('.html')) continue
+    if (String(o.fileId).includes('.trim.')) continue // 处理中间产物，不是素材
     if (known.has(o.fileId)) continue
     upsertIndex(bucket, {
       fileId: o.fileId,
@@ -40,6 +41,30 @@ export async function syncBucketIndex(bucket) {
     added++
   }
   return { ok: true, objects: objects.length, added }
+}
+
+/** driver 切到 oss 后的「有就是有」：以对象存储实际列举为准，索引里 OSS 不存在的条目剔除（本地磁盘文件保留，迁回+同步可恢复） */
+export async function pruneBucketIndex(bucket) {
+  const objects = await (await import('./storage.js')).list(bucket)
+  const inOss = new Set(objects.map((o) => o.fileId))
+  const rows = loadMeta(bucket)
+  const missing = rows.map((r) => r.fileId).filter((fid) => !inOss.has(fid) || String(fid).includes('.trim.'))
+  // 名字/自定义 meta 备份后再剔——切存储永不丢用户填的名称
+  if (missing.length) {
+    try {
+      const fs = (await import('node:fs')).default
+      const path = (await import('node:path')).default
+      const DATA = (await import('./config.js')).DATA_DIR
+      const bf = path.join(DATA, 'index-meta-backup.json')
+      const bak = fs.existsSync(bf) ? JSON.parse(fs.readFileSync(bf, 'utf8')) : {}
+      const bmap = bak[bucket] = bak[bucket] || {}
+      for (const r of rows) if (missing.includes(r.fileId)) bmap[r.fileId] = { ...r, prunedAt: Date.now() }
+      fs.mkdirSync(DATA, { recursive: true })
+      fs.writeFileSync(bf, JSON.stringify(bak, null, 2))
+    } catch {}
+  }
+  if (missing.length) removeIndex(bucket, missing)
+  return { ok: true, kept: rows.length - missing.length, pruned: missing.length, missing }
 }
 
 export function loadMeta(bucket) {

@@ -25,7 +25,7 @@ export function fixFileName(name) {
 }
 import { listSkills, addSkill, removeSkill, setSkillEnabled, setSkillScope, getSkillContent, skillPath } from './skills.js'
 import { DEFAULT_BUCKETS_META } from './bucketsMeta.js'
-import { loadMeta, getIndex, upsertIndex, removeIndex, paginate, syncBucketIndex } from './bucketIndex.js'
+import { loadMeta, getIndex, upsertIndex, removeIndex, paginate, syncBucketIndex, pruneBucketIndex } from './bucketIndex.js'
 
 /**
  * /v2 —— 三层素材模型开放接口（全部支持批量衍生）
@@ -488,7 +488,7 @@ export function buildV2Router() {
     if (req.query.reveal === '1') pub.apiKey = getSettings().apiKey || ''
     res.json(pub)
   })
-  r.put('/settings', (req, res) => {
+  r.put('/settings', async (req, res) => {
     const patch = req.body || {}
     const allow = ['apiKey', 'baseUrl', 'textModel', 'videoModel', 'videoResolution', 'qcModel', 'maxRepairRounds', 'mock', 'concurrency', 'apiKeys', 'buckets']
     const clean = {}
@@ -504,6 +504,17 @@ export function buildV2Router() {
       clean.buckets = merged
     }
     updateSettings(clean)
+    // 索引与存储对账（有就是有，不分方向）：统一「补录当前存储已有的 + 剔除当前存储没有的」→ 索引永远 = 当前存储的真实内容
+    for (const b of storage.BUCKETS) {
+      if (!clean.buckets?.[b]) continue
+      try {
+        const added = await syncBucketIndex(b)
+        const pruned = await pruneBucketIndex(b)
+        if (added.added || pruned.pruned) logEvent({ biz: 'l2compose', stage: 'reconcile-index', status: 'ok', note: `${b}: 索引对账完成（driver=${clean.buckets[b].driver}）——补录 ${added.added} · 剔除 ${pruned.pruned} · 保留 ${pruned.kept}` })
+      } catch (e) {
+        logEvent({ biz: 'l2compose', stage: 'reconcile-index', status: 'warn', note: `${b}: 索引对账失败 ${String(e.message).slice(0, 80)}` })
+      }
+    }
     res.json({ ...publicSettings(), buckets: getSettings().buckets })
   })
   r.post('/buckets/:bucket/test', async (req, res) => {
@@ -512,6 +523,104 @@ export function buildV2Router() {
     try {
       const items = await storage.list(bucket)
       res.json({ ok: true, driver: getSettings().buckets?.[bucket]?.driver || 'local', objects: items.length })
+    } catch (e) {
+      res.status(500).json({ ok: false, error: e.message })
+    }
+  })
+
+  // 本地 → OSS 迁移：把 data/buckets/<bucket>/ 的历史文件逐个写入当前配置的对象存储（fileId 不变，素材库索引无需变动）
+  r.post('/buckets/:bucket/migrate-local', async (req, res) => {
+    const { bucket } = req.params
+    if (!storage.BUCKETS.includes(bucket)) return res.status(400).json({ error: '桶名不合法' })
+    try {
+      const dir = path.join(DATA_DIR, 'buckets', bucket)
+      // 双侧合并：本地目录 ↔ 对象存储 互互补齐到一致（幂等可重复执行）
+      const { S3Client, ListObjectsV2Command, GetObjectCommand } = await import('@aws-sdk/client-s3')
+      const cfg = storage.normalizeOssCfg(getSettings().buckets?.[bucket] || {})
+      let ossKeys = new Set()
+      let ossGet = null
+      if (cfg.driver === 'oss' && cfg.accessKeyId) {
+        const c = new S3Client({
+          region: cfg.region || 'oss-cn-beijing',
+          endpoint: cfg.endpoint,
+          credentials: { accessKeyId: cfg.accessKeyId, secretAccessKey: cfg.secretAccessKey },
+          forcePathStyle: !!cfg.forcePathStyle,
+        })
+        let token
+        do {
+          const out = await c.send(new ListObjectsV2Command({ Bucket: cfg.bucket, MaxKeys: 1000, ContinuationToken: token }))
+          for (const o of out.Contents || []) ossKeys.add(o.Key)
+          token = out.IsTruncated ? out.NextContinuationToken : undefined
+        } while (token)
+        ossGet = async (key) => {
+          const out = await c.send(new GetObjectCommand({ Bucket: cfg.bucket, Key: key }))
+          return Buffer.from(await out.Body.transformToByteArray())
+        }
+      }
+      const files = []
+      if (fs.existsSync(dir)) {
+        const walk = (d) => {
+          for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+            if (e.name.startsWith('.')) continue
+            const full = path.join(d, e.name)
+            if (e.isDirectory()) walk(full)
+            else files.push(full)
+          }
+        }
+        walk(dir)
+      }
+      const items = []
+      let migrated = 0, skipped = 0
+      // ① 本地 → OSS（OSS 缺的上传）
+      for (const f of files) {
+        const name = path.relative(dir, f).split(path.sep).join('/')
+        try {
+          if (ossKeys.has(name)) { skipped++; items.push({ fileId: name, skipped: true }); continue }
+          await storage.put(bucket, name, fs.readFileSync(f))
+          ossKeys.add(name)
+          migrated++
+          items.push({ fileId: name, ok: true, direction: 'local→oss' })
+        } catch (e) {
+          items.push({ fileId: name, error: String(e.message).slice(0, 100) })
+        }
+      }
+      // ② OSS → 本地（本地缺的下载，两侧最终一致）
+      if (ossGet) {
+        for (const key of ossKeys) {
+          const localPath = path.join(dir, key)
+          if (fs.existsSync(localPath)) continue
+          try {
+            const buf = await ossGet(key)
+            fs.mkdirSync(path.dirname(localPath), { recursive: true })
+            fs.writeFileSync(localPath, buf)
+            migrated++
+            items.push({ fileId: key, ok: true, direction: 'oss→local' })
+          } catch (e) {
+            items.push({ fileId: key, error: String(e.message).slice(0, 100) })
+          }
+        }
+      }
+      // ③ 索引恢复：两侧并集逐条补录（备份 meta 优先 → 现有索引 → 前缀推断兜底）
+      let bakMeta = {}
+      try { bakMeta = (JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'index-meta-backup.json'), 'utf8'))[bucket]) || {} } catch {}
+      let restored = 0
+      for (const key of ossKeys) {
+        if (String(key).includes('.trim.') || String(key).endsWith('.html')) continue
+        const prev = getIndex(bucket, key) || bakMeta[key] || {}
+        if (getIndex(bucket, key)) continue
+        upsertIndex(bucket, {
+          fileId: key,
+          url: `/v2/files/${bucket}/${key}`,
+          name: prev.name || key,
+          category: prev.category ?? (bucket === 'l1' ? guessCategory(key) : null),
+          size: prev.size ?? null,
+          createdAt: prev.createdAt || Date.now(),
+          ...(prev.meta ? { meta: prev.meta } : {}),
+        })
+        restored++
+      }
+      logEvent({ biz: 'l2compose', stage: 'merge-buckets', status: 'ok', note: `${bucket}: 双侧合并完成——传输 ${migrated} · 已一致跳过 ${skipped} · 索引补录 ${restored}` })
+      res.json({ ok: true, migrated, skipped, restored, failed: items.filter(i => i.error).length, items })
     } catch (e) {
       res.status(500).json({ ok: false, error: e.message })
     }
