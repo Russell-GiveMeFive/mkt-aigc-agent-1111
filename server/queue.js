@@ -428,7 +428,7 @@ async function finalizeVideo(task, videoFile) {
   task.results.video = `/files/outputs/${task.id}/video.mp4`
   setStage(task, 'video', 'done', { note: 'H3 视频生成完成' })
   try {
-    const l4Name = task.results.videoTaskId ? `l4_${task.results.videoTaskId}.mp4` : `${storage.newFileId('l4')}.mp4`
+    const l4Name = task.results.videoTaskId ? `${task.results.videoTaskId}.mp4` : `${storage.newFileId('l4')}.mp4` // 三桶制：视频文件名=H3 taskId
     const put4 = await storage.put('l4', l4Name, fs.readFileSync(videoFile), 'video/mp4')
     task.results.l4FileId = put4.fileId
     task.results.l4Url = put4.url

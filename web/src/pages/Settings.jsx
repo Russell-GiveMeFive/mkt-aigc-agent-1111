@@ -3,7 +3,7 @@ import { api } from '../api.js'
 
 const OSS_ONLY = ['endpoint', 'bucket', 'accessKeyId', 'secretAccessKey', 'region', 'publicBaseUri']
 const FIELD_LABELS = { endpoint: 'Endpoint', bucket: 'Bucket 名', accessKeyId: 'AccessKeyId', secretAccessKey: 'SecretAccessKey', region: 'Region', publicBaseUri: '公共访问前缀' }
-const BUCKET_LABELS = { l1: 'L1 基础素材', l2: 'L2 商品海报合成', l3: 'L3 海报合成 - 二次加工', l4: 'L4 视频合成' }
+const BUCKET_LABELS = { l1: '素材桶 · 原始素材', l2: '海报桶 · 生产管线海报', l4: '视频桶 · mp4（taskId 命名）' } // 三桶制：l3 桶已停用（历史数据保留）
 
 export default function Settings() {
   const [s, setS] = useState(null)
@@ -76,11 +76,13 @@ export default function Settings() {
     }
   }
 
-  const testOne = async (b) => {
+  const testOne = async (b, formDriver) => {
     setTest({ ...test, [b]: { loading: true } })
     try {
       const r = await api.testBucket(b)
-      setTest({ ...test, [b]: { ok: r.ok, text: `${r.driver} · ${r.objects} 个对象` } })
+      // 测的是「已保存」配置——表单改过未保存时会测旧值，明确提示避免误解
+      const stale = formDriver && r.driver && formDriver !== r.driver
+      setTest({ ...test, [b]: { ok: r.ok, text: `${r.driver} · ${r.objects} 个对象${stale ? ' ⚠️ 表单已改但未保存——先点「保存设置」再测' : ''}` } })
     } catch (e) {
       setTest({ ...test, [b]: { ok: false, text: e.message } })
     }
@@ -133,9 +135,9 @@ export default function Settings() {
       <div className="sectionGap" />
 
       <div className="card">
-        <h3>四桶独立存储 <span className="mono dim" style={{ fontSize: 10.5 }}>L1 / L2 / L3 / L4 各自配置</span></h3>
+        <h3>三桶存储 <span className="mono dim" style={{ fontSize: 10.5 }}>素材 / 海报 / 视频 各自配置 · l3 已停用</span></h3>
         <div className="grid2">
-          {['l1', 'l2', 'l3', 'l4'].map((b) => {
+          {['l1', 'l2', 'l4'].map((b) => {
             const cfg = s.buckets?.[b] || {}
             const t = test[b]
             return (
@@ -144,7 +146,8 @@ export default function Settings() {
                   <b style={{ fontSize: 13 }}>{BUCKET_LABELS[b]}</b>
                   <span style={{ flex: 1 }} />
                   <button className="btn sm" title="全量列举一次桶内容，补录索引之外的对象（列表接口零 OSS 请求）" onClick={() => syncOne(b)}>{t?.syncing ? '…' : '⟳ 同步'}</button>
-                  <button className="btn sm" onClick={() => testOne(b)}>{t?.loading ? '…' : '测连通'}</button>
+                  <button className="btn sm" onClick={() => testOne(b, cfg?.driver)}>{t?.loading ? '…' : '测连通'}</button>
+                  {cfg.driver === 'oss' && <button className="btn sm" title="把本地 data/buckets 里的历史文件搬进 OSS（fileId 不变，可重复执行，已存在的跳过）" onClick={async () => { setTest({ ...test, [b]: { loading: true } }); try { const r = await api.migrateBucketLocal(b); setTest({ ...test, [b]: { ok: true, text: `迁移完成：${r.migrated} 个上传 · ${r.skipped} 个已存在跳过${r.failed ? ` · ${r.failed} 个失败` : ''}` } }) } catch (e) { setTest({ ...test, [b]: { ok: false, text: e.message } }) } }}>{t?.loading ? '…' : '迁本地'}</button>}
                 </div>
                 {t && !t.loading && <div className={t.ok ? 'ok' : 'err'} style={{ fontSize: 11, marginBottom: 6 }}>{t.ok ? '✓ ' : '✗ '}{t.text}</div>}
                 <label className="f"><span>存储类型</span>

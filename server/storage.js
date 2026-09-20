@@ -21,19 +21,39 @@ const localDir = (bucket) => path.join(DATA_DIR, 'buckets', bucket)
 function bucketCfg(bucket) {
   const s = getSettings()
   const all = s.buckets || {}
-  return { driver: 'local', ...all[bucket] }
+  const cfg = { driver: 'local', ...all[bucket] }
+  if (cfg.driver === 'oss') return normalizeOssCfg(cfg) // 所有 oss 读取路径统一走容错归一化
+  return cfg
 }
 
 export function newFileId(prefix = 'f') {
   return `${prefix}_${Date.now().toString(36)}${crypto.randomBytes(3).toString('hex')}`
 }
 
+/** 表单容错：endpoint 自动补协议、bucket 剥离误填的域名后缀、region 从 endpoint 提取 */
+export function normalizeOssCfg(cfg) {
+  const c = { ...cfg }
+  // ① endpoint 必须是完整 URL（SDK 内部 new URL()），裸域名自动补 https://
+  if (c.endpoint && !/^https?:\/\//i.test(c.endpoint)) c.endpoint = `https://${c.endpoint}`
+  // ② 用户常把「Bucket 域名」整串填进桶名（如 jd-level1.tos-cn-beijing.volces.com）→ 剥离成纯桶名
+  if (c.bucket && /^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}$/i.test(c.bucket) && /\.(com|net|cn|org|io)$/i.test(c.bucket)) {
+    c.bucket = c.bucket.split('.')[0]
+  }
+  // ③ region 缺省时从 endpoint 提取（如 tos-s3-cn-beijing.volces.com → cn-beijing）
+  if (!c.region && c.endpoint) {
+    const m = String(c.endpoint).match(/((?:cn|ap|eu|us|sa|af|me)-[a-z]+-?\d*)/i)
+    if (m) c.region = m[1]
+  }
+  return c
+}
+
 function s3Client(cfg) {
+  const c = normalizeOssCfg(cfg)
   return new S3Client({
-    region: cfg.region || 'oss-cn-beijing',
-    endpoint: cfg.endpoint, // 例如 https://oss-cn-beijing.aliyuncs.com
-    credentials: { accessKeyId: cfg.accessKeyId, secretAccessKey: cfg.secretAccessKey },
-    forcePathStyle: !!cfg.forcePathStyle,
+    region: c.region || 'oss-cn-beijing',
+    endpoint: c.endpoint, // 例如 https://oss-cn-beijing.aliyuncs.com（自动补协议）
+    credentials: { accessKeyId: c.accessKeyId, secretAccessKey: c.secretAccessKey },
+    forcePathStyle: !!c.forcePathStyle,
   })
 }
 
